@@ -1,0 +1,223 @@
+.character-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Header */
+.sheet-header {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.character-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.character-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.character-basic {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.character-basic h2 {
+  font-size: 1.3rem;
+  margin: 0;
+}
+
+.character-role {
+  font-size: 0.85rem;
+  color: var(--accent-light);
+  font-weight: 500;
+}
+
+.character-hierarchy {
+  font-size: 0.8rem;
+}
+
+/* Description */
+.character-description {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* Status Badge */
+.status-badge {
+  display: inline-block;
+  padding: 0.5rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+}
+
+/* Sections */
+.sheet-section {
+  padding: 0.75rem 0;
+}
+
+.section-title {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+}
+
+/* Skills */
+.skills-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.skill-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.skill-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.skill-description {
+  margin-top: 0.25rem;
+}
+
+/* Abilities */
+.abilities-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.ability-item {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.ability-name {
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+/* Traits */
+.traits-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.trait-badge {
+  padding: 0.3rem 0.6rem;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--info);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Advantages */
+.advantages-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.advantage-badge {
+  padding: 0.3rem 0.6rem;
+  background: rgba(16, 185, 129, 0.15);
+  color: var(--success);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Special Powers */
+.special-power {
+  background: var(--bg-tertiary);
+  padding: 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.special-power .section-title {
+  color: var(--accent-light);
+  margin-bottom: 0.5rem;
+}
+
+/* Stand Stats */
+.stand-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.stand-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+/* Technique */
+.technique-item {
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  margin-top: 0.5rem;
+}
+
+/* Zanpakuto */
+.zanpakuto-form {
+  margin-top: 0.75rem;
+  padding: 0.5rem;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+}

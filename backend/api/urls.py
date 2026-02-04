@@ -1,15 +1,41 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import CampaignViewSet, CharacterViewSet, ItemViewSet, LoginView, RegisterView
+from .views import (
+    RegisterView, LoginView, MeView,
+    CampaignViewSet, CampaignPollView,
+    CharacterViewSet, CharacterNoteViewSet,
+    ItemViewSet, DiceRollViewSet, NotificationViewSet,
+    SkillViewSet, AbilityViewSet, AdvantageViewSet, PersonalityTraitViewSet,
+    StandViewSet, CursedTechniqueViewSet, ZanpakutoViewSet,
+    SessionViewSet,
+)
 
 router = DefaultRouter()
 router.register('campaigns', CampaignViewSet, basename='campaign')
 router.register('characters', CharacterViewSet, basename='character')
+router.register('notes', CharacterNoteViewSet, basename='note')
 router.register('items', ItemViewSet, basename='item')
+router.register('rolls', DiceRollViewSet, basename='roll')
+router.register('notifications', NotificationViewSet, basename='notification')
+router.register('skills', SkillViewSet, basename='skill')
+router.register('abilities', AbilityViewSet, basename='ability')
+router.register('advantages', AdvantageViewSet, basename='advantage')
+router.register('traits', PersonalityTraitViewSet, basename='trait')
+router.register('stands', StandViewSet, basename='stand')
+router.register('cursed-techniques', CursedTechniqueViewSet, basename='cursed-technique')
+router.register('zanpakuto', ZanpakutoViewSet, basename='zanpakuto')
+router.register('sessions', SessionViewSet, basename='session')
 
 urlpatterns = [
+    # Auth
     path('auth/register/', RegisterView.as_view(), name='register'),
     path('auth/login/', LoginView.as_view(), name='login'),
+    path('auth/me/', MeView.as_view(), name='me'),
+    
+    # Polling
+    path('campaigns/<int:campaign_id>/poll/', CampaignPollView.as_view(), name='campaign-poll'),
+    
+    # Router
     path('', include(router.urls)),
 ]
