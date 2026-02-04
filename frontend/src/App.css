@@ -323,6 +323,11 @@
 }
 
 .item-actions select {
+  border: 1px solid rgba(18, 18, 18, 0.15);
+  border-radius: 12px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.85rem;
+  background: #fffdf8;
   min-width: 160px;
 }
 
