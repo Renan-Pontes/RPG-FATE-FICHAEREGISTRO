@@ -334,7 +334,6 @@ function App() {
       setCharacters((prev) => [data, ...prev])
       setCharacterName('')
       setCharacterDescription('')
-      setCharacterCampaignId('')
       setStatus('success', 'Ficha criada.')
     } catch (error) {
       setStatus('error', 'Nao foi possivel criar ficha.')
@@ -363,6 +362,10 @@ function App() {
     setTransferTargets({})
     setStatus('success', 'Voce saiu da conta.')
   }
+
+  const selectedCampaign = campaigns.find(
+    (campaign) => campaign.id === Number(characterCampaignId),
+  )
 
   return (
     <div className="app">
@@ -535,83 +538,253 @@ function App() {
                 </div>
               )}
 
-              <div className="card" id="character-form">
-                <h2>Criar ficha</h2>
-                <p className="muted">Jogadores criam fichas dentro da campanha.</p>
-                {campaigns.length === 0 && (
-                  <div className="alert error">
-                    Nao existe campanha. Aguarde o DM criar.
-                  </div>
-                )}
-                {campaigns.length > 0 && characterCampaignId && (
-                  <div className="alert success">
-                    Campanha selecionada:{' '}
-                    {campaigns.find(
-                      (campaign) => campaign.id === Number(characterCampaignId),
-                    )?.name || 'Nao encontrada'}
-                  </div>
-                )}
-                <form className="form" onSubmit={handleCreateCharacter}>
-                  <label>
-                    <span>Nome do personagem</span>
-                    <input
-                      type="text"
-                      placeholder="Nome do personagem"
-                      value={characterName}
-                      onChange={(event) => setCharacterName(event.target.value)}
-                      disabled={campaigns.length === 0}
-                    />
-                  </label>
-                  <label>
-                    <span>Descricao</span>
-                    <input
-                      type="text"
-                      placeholder="Resumo curto"
-                      value={characterDescription}
-                      onChange={(event) => setCharacterDescription(event.target.value)}
-                      disabled={campaigns.length === 0}
-                    />
-                  </label>
-                  <label>
-                    <span>Campanha</span>
-                    <select
-                      value={characterCampaignId}
-                      onChange={(event) => setCharacterCampaignId(event.target.value)}
-                      disabled={campaigns.length === 0}
-                    >
-                      <option value="">Selecione</option>
-                      {campaigns.map((campaign) => (
-                        <option key={campaign.id} value={campaign.id}>
-                          {campaign.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    className="primary"
-                    type="submit"
-                    disabled={campaigns.length === 0}
-                  >
-                    Criar ficha
-                  </button>
-                </form>
-              </div>
-
-              <div className="card">
-                <h2>Minhas fichas</h2>
-                {characters.length === 0 && (
-                  <div className="muted small">Nenhuma ficha criada ainda.</div>
-                )}
-                {characters.map((char) => (
-                  <div className="list-item" key={char.id}>
+              {characterCampaignId ? (
+                <div className="card" id="character-form">
+                  <div className="card-head">
                     <div>
-                      <strong>{char.name}</strong>
-                      <div className="muted small">{char.description}</div>
+                      <h2>{selectedCampaign?.name || 'Campanha selecionada'}</h2>
+                      <p className="muted">
+                        Gerencie suas fichas, itens e habilidades.
+                      </p>
                     </div>
-                    <span className="pill small">#{char.id}</span>
                   </div>
-                ))}
-              </div>
+                  <div className="tab-bar">
+                    <button
+                      className={`tab ${activeTab === 'characters' ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => setActiveTab('characters')}
+                    >
+                      Fichas
+                    </button>
+                    <button
+                      className={`tab ${activeTab === 'items' ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => setActiveTab('items')}
+                    >
+                      Itens
+                    </button>
+                    <button
+                      className={`tab ${activeTab === 'abilities' ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => setActiveTab('abilities')}
+                    >
+                      Habilidades
+                    </button>
+                  </div>
+
+                  {activeTab === 'characters' && (
+                    <div className="tab-panel">
+                      <form className="form" onSubmit={handleCreateCharacter}>
+                        <label>
+                          <span>Nome do personagem</span>
+                          <input
+                            type="text"
+                            placeholder="Nome do personagem"
+                            value={characterName}
+                            onChange={(event) => setCharacterName(event.target.value)}
+                          />
+                        </label>
+                        <label>
+                          <span>Descricao</span>
+                          <input
+                            type="text"
+                            placeholder="Resumo curto"
+                            value={characterDescription}
+                            onChange={(event) =>
+                              setCharacterDescription(event.target.value)
+                            }
+                          />
+                        </label>
+                        <button className="primary" type="submit">
+                          Criar ficha na campanha
+                        </button>
+                      </form>
+
+                      <div className="list">
+                        <div className="list-title">Fichas na campanha</div>
+                        {characters.length === 0 && (
+                          <div className="muted small">
+                            Nenhuma ficha criada ainda.
+                          </div>
+                        )}
+                        {characters.map((char) => (
+                          <div className="list-item" key={char.id}>
+                            <div>
+                              <strong>{char.name}</strong>
+                              <div className="muted small">{char.description}</div>
+                              <div className="muted small">
+                                {char.role ? `Papel: ${char.role}` : ''}
+                                {char.hierarchy ? ` • Hierarquia: ${char.hierarchy}` : ''}
+                              </div>
+                            </div>
+                            <span className="pill small">#{char.id}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'items' && (
+                    <div className="tab-panel">
+                      {currentUser.is_game_master && (
+                        <form className="form" onSubmit={handleCreateItem}>
+                          <div className="list-title">Adicionar item</div>
+                          <label>
+                            <span>Nome</span>
+                            <input
+                              type="text"
+                              placeholder="Nome do item"
+                              value={itemName}
+                              onChange={(event) => setItemName(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>Tipo</span>
+                            <input
+                              type="text"
+                              placeholder="Ex: arma, consumivel"
+                              value={itemType}
+                              onChange={(event) => setItemType(event.target.value)}
+                            />
+                          </label>
+                          <label>
+                            <span>Descricao</span>
+                            <input
+                              type="text"
+                              placeholder="Resumo curto"
+                              value={itemDescription}
+                              onChange={(event) =>
+                                setItemDescription(event.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span>Durabilidade</span>
+                            <input
+                              type="number"
+                              min="0"
+                              value={itemDurability}
+                              onChange={(event) =>
+                                setItemDurability(event.target.value)
+                              }
+                            />
+                          </label>
+                          <label>
+                            <span>Personagem</span>
+                            <select
+                              value={itemOwnerCharacterId}
+                              onChange={(event) =>
+                                setItemOwnerCharacterId(event.target.value)
+                              }
+                            >
+                              <option value="">Selecione</option>
+                              {characters.map((char) => (
+                                <option key={char.id} value={char.id}>
+                                  {char.name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <button className="primary" type="submit">
+                            Criar item
+                          </button>
+                        </form>
+                      )}
+
+                      <div className="list">
+                        <div className="list-title">Itens na campanha</div>
+                        {itemsLoading && (
+                          <div className="muted small">Carregando itens...</div>
+                        )}
+                        {!itemsLoading && items.length === 0 && (
+                          <div className="muted small">Nenhum item encontrado.</div>
+                        )}
+                        {!itemsLoading &&
+                          items.map((itm) => (
+                            <div className="list-item" key={itm.id}>
+                              <div>
+                                <strong>{itm.name}</strong>
+                                <div className="muted small">{itm.description}</div>
+                                <div className="muted small">
+                                  {itm.type_item ? `Tipo: ${itm.type_item}` : ''}
+                                  {itm.owner_character_name
+                                    ? ` • Dono: ${itm.owner_character_name}`
+                                    : ''}
+                                </div>
+                              </div>
+                              <div className="item-actions">
+                                <select
+                                  value={transferTargets[itm.id] || ''}
+                                  onChange={(event) =>
+                                    setTransferTargets((prev) => ({
+                                      ...prev,
+                                      [itm.id]: event.target.value,
+                                    }))
+                                  }
+                                >
+                                  <option value="">Transferir para...</option>
+                                  {characters.map((char) => (
+                                    <option key={char.id} value={char.id}>
+                                      {char.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <button
+                                  className="secondary"
+                                  type="button"
+                                  onClick={() => handleTransferItem(itm.id)}
+                                >
+                                  Transferir
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === 'abilities' && (
+                    <div className="tab-panel">
+                      <div className="list">
+                        <div className="list-title">Habilidades por personagem</div>
+                        {characters.length === 0 && (
+                          <div className="muted small">
+                            Nenhuma ficha na campanha.
+                          </div>
+                        )}
+                        {characters.map((char) => (
+                          <div className="list-item" key={char.id}>
+                            <div>
+                              <strong>{char.name}</strong>
+                              <div className="muted small">{char.description}</div>
+                              <div className="ability-list">
+                                {(char.abilities || []).length === 0 && (
+                                  <span className="muted small">
+                                    Sem habilidades.
+                                  </span>
+                                )}
+                                {(char.abilities || []).map((ability) => (
+                                  <span className="pill small" key={ability.id}>
+                                    {ability.name}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <span className="pill small">#{char.id}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="card" id="character-form">
+                  <h2>Selecione uma campanha</h2>
+                  <p className="muted">
+                    Clique em um card de campanha para criar ficha e ver itens.
+                  </p>
+                </div>
+              )}
             </div>
           ) : (
             <>

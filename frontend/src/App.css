@@ -288,6 +288,51 @@
   background: rgba(255, 255, 255, 0.6);
 }
 
+.tab-bar {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin: 0.5rem 0 1.5rem;
+}
+
+.tab {
+  border: 1px solid rgba(18, 18, 18, 0.12);
+  background: rgba(255, 255, 255, 0.8);
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.tab.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.tab-panel {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.item-actions {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: end;
+}
+
+.item-actions select {
+  min-width: 160px;
+}
+
+.ability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
 .form {
   display: grid;
   gap: 1rem;

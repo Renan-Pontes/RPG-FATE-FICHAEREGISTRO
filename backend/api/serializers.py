@@ -52,6 +52,8 @@ class AbilitySerializer(serializers.ModelSerializer):
 
 
 class CharacterSerializer(serializers.ModelSerializer):
+    abilities = AbilitySerializer(many=True, read_only=True)
+
     class Meta:
         model = character
         fields = (
@@ -64,6 +66,7 @@ class CharacterSerializer(serializers.ModelSerializer):
             'hierarchy',
             'role',
             'notes',
+            'abilities',
             'status',
             'força',
             'destreza',
