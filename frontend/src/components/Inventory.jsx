@@ -111,6 +111,9 @@ function ItemCard({ item, onEquip, onUse, isEquipped }) {
           {item.quantity > 1 && (
             <span className="item-qty">x{item.quantity}</span>
           )}
+          {typeof item.durability === 'number' && (
+            <span className="item-qty">Dur: {item.durability}</span>
+          )}
           {item.bonus_value > 0 && (
             <span className="item-bonus">+{item.bonus_value} {item.bonus_status}</span>
           )}

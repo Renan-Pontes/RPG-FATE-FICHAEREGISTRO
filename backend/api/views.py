@@ -1,7 +1,7 @@
 import random
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
-from django.db import transaction
+from django.db import transaction, models
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.authtoken.models import Token
@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .models import (
-    Profile, Campaign, CampaignBan, Character, CharacterNote, Item,
+    Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
     Stand, CursedTechnique, Zanpakuto,
     DiceRoll, Notification, ItemTrade, Session
@@ -87,7 +87,10 @@ def create_dice_roll(*, character, skill_id=None, description='', use_fate_point
     skill = None
     hidden_bonus = 0
     if skill_id:
-        skill = Skill.objects.get(id=skill_id)
+        try:
+            skill = Skill.objects.get(id=skill_id)
+        except Skill.DoesNotExist:
+            raise ValidationError('Skill não encontrada.')
         if skill.campaign_id and skill.campaign_id != character.campaign_id:
             raise ValidationError('Skill inválida para esta campanha.')
         hidden_bonus += skill.bonus
@@ -102,6 +105,11 @@ def create_dice_roll(*, character, skill_id=None, description='', use_fate_point
         }
         if skill.use_status.lower() in stat_map:
             hidden_bonus += stat_map[skill.use_status.lower()]
+            # Bônus de traços de personalidade
+            trait_bonus = character.personality_traits.filter(
+                use_status__iexact=skill.use_status
+            ).aggregate(total=models.Sum('bonus'))['total'] or 0
+            hidden_bonus += trait_bonus
 
     hidden_total = final_total + hidden_bonus
 
@@ -325,6 +333,123 @@ class CampaignViewSet(viewsets.ModelViewSet):
             'removed_characters': removed_count,
         })
 
+    @action(detail=True, methods=['post'])
+    def request_roll(self, request, pk=None):
+        """Mestre solicita rolagem para um jogador"""
+        campaign = self.get_object()
+        if not is_campaign_master(request.user, campaign):
+            raise PermissionDenied('Apenas o mestre pode solicitar rolagens.')
+
+        character_id = request.data.get('character_id')
+        if not character_id:
+            raise ValidationError('Informe character_id.')
+
+        try:
+            character = Character.objects.select_related('owner').get(
+                id=int(character_id),
+                campaign=campaign,
+                is_npc=False,
+            )
+        except (Character.DoesNotExist, ValueError, TypeError):
+            raise ValidationError('Personagem não encontrado.')
+
+        if is_user_banned_from_campaign(character.owner, campaign):
+            raise ValidationError('Este jogador está banido desta campanha.')
+
+        skill_id = request.data.get('skill_id')
+        skill = None
+        if skill_id:
+            try:
+                skill = Skill.objects.get(id=skill_id)
+            except Skill.DoesNotExist:
+                raise ValidationError('Skill não encontrada.')
+            if skill.campaign_id and skill.campaign_id != campaign.id:
+                raise ValidationError('Skill inválida para esta campanha.')
+
+        description = request.data.get('description', '')
+
+        roll_request = RollRequest.objects.create(
+            campaign=campaign,
+            character=character,
+            requested_by=request.user,
+            skill=skill,
+            description=description,
+        )
+
+        Notification.objects.create(
+            campaign=campaign,
+            recipient=character.owner,
+            notification_type='system',
+            title='Solicitação de rolagem',
+            message=f'O mestre solicitou uma rolagem para {character.name}.',
+            related_character=character,
+        )
+
+        return Response(RollRequestSerializer(roll_request).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def complete_roll(self, request, pk=None):
+        """Jogador completa uma solicitação de rolagem"""
+        campaign = self.get_object()
+        request_id = request.data.get('request_id')
+        if not request_id:
+            raise ValidationError('Informe request_id.')
+
+        try:
+            roll_request = RollRequest.objects.select_related(
+                'character', 'campaign', 'character__owner',
+            ).get(id=int(request_id), campaign=campaign, is_open=True)
+        except (RollRequest.DoesNotExist, ValueError, TypeError):
+            raise ValidationError('Solicitação não encontrada ou já concluída.')
+
+        ensure_not_banned(request.user, campaign)
+
+        if roll_request.character.owner_id != request.user.id:
+            raise PermissionDenied('Esta rolagem não é para você.')
+
+        use_fate_point = bool(request.data.get('use_fate_point', False))
+        roll = create_dice_roll(
+            character=roll_request.character,
+            skill_id=roll_request.skill_id,
+            description=roll_request.description,
+            use_fate_point=use_fate_point,
+        )
+
+        roll_request.is_open = False
+        roll_request.fulfilled_at = timezone.now()
+        roll_request.fulfilled_by = request.user
+        roll_request.roll = roll
+        roll_request.save()
+
+        # Notificar todos os jogadores da campanha e o mestre
+        participant_ids = set(
+            Character.objects.filter(
+                campaign=campaign,
+                is_npc=False,
+            ).values_list('owner_id', flat=True)
+        )
+        participant_ids.add(campaign.owner_id)
+
+        for user_id in participant_ids:
+            if user_id == campaign.owner_id:
+                message = (
+                    f'{roll.character.name} rolou: {roll.final_total} '
+                    f'(Total oculto: {roll.hidden_total})'
+                )
+            else:
+                message = f'{roll.character.name} rolou: {roll.final_total}'
+            Notification.objects.create(
+                campaign=campaign,
+                recipient_id=user_id,
+                notification_type='roll',
+                title='Rolagem de Dados',
+                message=message,
+                related_character=roll.character,
+                related_roll=roll,
+            )
+
+        return Response(DiceRollSerializer(roll).data, status=status.HTTP_201_CREATED)
+
     @action(detail=True, methods=['get'])
     def projection(self, request, pk=None):
         """Retorna a projeção atual da campanha"""
@@ -436,6 +561,9 @@ class CharacterViewSet(viewsets.ModelViewSet):
         ensure_not_banned(self.request.user, character.campaign)
         if not is_game_master(self.request.user) and character.owner_id != self.request.user.id:
             raise PermissionDenied('Você não pode editar este personagem.')
+        if is_campaign_master(self.request.user, character.campaign):
+            if 'shikai_active' in self.request.data or 'bankai_active' in self.request.data:
+                raise ValidationError('Ativação de Shikai/Bankai é decisão do jogador.')
         serializer.save()
 
     def perform_destroy(self, instance):
@@ -450,10 +578,83 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character = self.get_object()
         if not is_campaign_master(request.user, character.campaign):
             raise PermissionDenied('Apenas o mestre pode atualizar stats.')
-        
+
+        campaign_type = character.campaign.campaign_type
+        if 'stand_unlocked' in request.data and campaign_type != 'jojo':
+            raise ValidationError('Stand só pode ser liberado em campanha JoJo.')
+        if 'cursed_energy_unlocked' in request.data or 'cursed_energy' in request.data:
+            if campaign_type != 'jjk':
+                raise ValidationError('Energia amaldiçoada só existe em campanha JJK.')
+        if (
+            'zanpakuto_unlocked' in request.data
+            or 'shikai_unlocked' in request.data
+            or 'bankai_unlocked' in request.data
+        ):
+            if campaign_type != 'bleach':
+                raise ValidationError('Zanpakutou só existe em campanha Bleach.')
+
+        if request.data.get('bankai_unlocked') and not (request.data.get('shikai_unlocked') or character.shikai_unlocked):
+            raise ValidationError('Liberar Bankai requer Shikai liberado.')
+        if request.data.get('shikai_unlocked') and not (request.data.get('zanpakuto_unlocked') or character.zanpakuto_unlocked):
+            raise ValidationError('Liberar Shikai requer Zanpakutou liberada.')
+
         serializer = CharacterStatsUpdateSerializer(character, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
+        prev = {
+            'stand_unlocked': character.stand_unlocked,
+            'cursed_energy_unlocked': character.cursed_energy_unlocked,
+            'zanpakuto_unlocked': character.zanpakuto_unlocked,
+            'shikai_unlocked': character.shikai_unlocked,
+            'bankai_unlocked': character.bankai_unlocked,
+        }
         serializer.save()
+
+        # Notificações de desbloqueio
+        if not prev['stand_unlocked'] and character.stand_unlocked:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Stand Liberado',
+                message='Seu Stand foi liberado. Você já pode criá-lo.',
+                related_character=character,
+            )
+        if not prev['cursed_energy_unlocked'] and character.cursed_energy_unlocked:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Energia Amaldiçoada Liberada',
+                message='Você despertou a energia amaldiçoada.',
+                related_character=character,
+            )
+        if not prev['zanpakuto_unlocked'] and character.zanpakuto_unlocked:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Zanpakutou Liberada',
+                message='Sua Zanpakutou foi liberada.',
+                related_character=character,
+            )
+        if not prev['shikai_unlocked'] and character.shikai_unlocked:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Shikai Liberada',
+                message='Sua Shikai foi liberada.',
+                related_character=character,
+            )
+        if not prev['bankai_unlocked'] and character.bankai_unlocked:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Bankai Liberada',
+                message='Sua Bankai foi liberada.',
+                related_character=character,
+            )
         return Response(CharacterMasterSerializer(character).data)
 
     @action(detail=True, methods=['post'])
@@ -492,6 +693,41 @@ class CharacterViewSet(viewsets.ModelViewSet):
         )
         
         return Response({'fate_points': character.fate_points})
+
+    @action(detail=True, methods=['post'])
+    def set_release(self, request, pk=None):
+        """Jogador ativa/desativa Shikai/Bankai"""
+        character = self.get_object()
+        ensure_not_banned(request.user, character.campaign)
+
+        if character.owner_id != request.user.id and not is_campaign_master(request.user, character.campaign):
+            raise PermissionDenied('Este não é seu personagem.')
+
+        if character.campaign.campaign_type != 'bleach':
+            raise ValidationError('Esta ação só é válida em campanhas Bleach.')
+
+        shikai_active = request.data.get('shikai_active', character.shikai_active)
+        bankai_active = request.data.get('bankai_active', character.bankai_active)
+
+        shikai_active = bool(shikai_active)
+        bankai_active = bool(bankai_active)
+
+        if shikai_active and not character.shikai_unlocked:
+            raise ValidationError('Shikai ainda não foi liberada.')
+        if bankai_active and not character.bankai_unlocked:
+            raise ValidationError('Bankai ainda não foi liberada.')
+        if bankai_active and not character.shikai_unlocked:
+            raise ValidationError('Bankai requer Shikai liberada.')
+
+        if bankai_active:
+            shikai_active = True
+
+        character.shikai_active = shikai_active
+        character.bankai_active = bankai_active
+        character.save()
+
+        serializer = CharacterMasterSerializer(character) if is_campaign_master(request.user, character.campaign) else CharacterPublicSerializer(character)
+        return Response(serializer.data)
 
 
 # ============== CHARACTER NOTES ==============
@@ -564,6 +800,11 @@ class ItemViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):
             raise PermissionDenied('Apenas o mestre pode criar itens.')
+        serializer.save()
+
+    def perform_update(self, serializer):
+        if not is_game_master(self.request.user):
+            raise PermissionDenied('Apenas o mestre pode atualizar itens.')
         serializer.save()
 
     @action(detail=True, methods=['post'])
@@ -643,6 +884,28 @@ class ItemViewSet(viewsets.ModelViewSet):
         
         if item.owner_character.owner_id != request.user.id and not is_game_master(request.user):
             raise PermissionDenied('Este item não é seu.')
+
+        if not item.is_equipped:
+            if item.item_type in ('quest', 'misc'):
+                raise ValidationError('Este item não pode ser equipado.')
+
+            limits = {
+                'armor': 4,
+                'weapon': 1,
+                'consumable': 1,
+                'accessory': 1,
+            }
+            limit = limits.get(item.item_type)
+            if limit is None:
+                raise ValidationError('Tipo de item inválido para equipar.')
+
+            equipped_count = Item.objects.filter(
+                owner_character=item.owner_character,
+                item_type=item.item_type,
+                is_equipped=True,
+            ).count()
+            if equipped_count >= limit:
+                raise ValidationError('Limite de itens equipados deste tipo atingido.')
         
         item.is_equipped = not item.is_equipped
         item.save()
@@ -707,71 +970,29 @@ class DiceRollViewSet(viewsets.ModelViewSet):
 
     def create(self, request, *args, **kwargs):
         """Jogador rola os dados"""
+        if not is_game_master(request.user):
+            raise PermissionDenied('Apenas rolagens solicitadas pelo mestre.')
+
         create_serializer = DiceRollCreateSerializer(data=request.data)
         create_serializer.is_valid(raise_exception=True)
         
         character_id = request.data.get('character_id')
-        character = Character.objects.select_related('campaign').get(id=character_id)
+        try:
+            character = Character.objects.select_related('campaign').get(id=int(character_id))
+        except (Character.DoesNotExist, ValueError, TypeError):
+            raise ValidationError('Personagem não encontrado.')
         ensure_not_banned(request.user, character.campaign)
         
         if character.owner_id != request.user.id and not is_game_master(request.user):
             raise PermissionDenied('Este não é seu personagem.')
         
-        # Rolar 4 dados FATE (-1, 0, +1)
-        dice_results = [random.choice([-1, 0, 1]) for _ in range(4)]
-        dice_total = sum(dice_results)
-        
         use_fate_point = create_serializer.validated_data.get('use_fate_point', False)
-        
-        # Se usar Fate Point, todos viram +1
-        if use_fate_point:
-            if character.fate_points <= 0:
-                raise ValidationError('Sem fate points disponíveis.')
-            character.fate_points -= 1
-            character.save()
-            dice_results = [1, 1, 1, 1]
-            final_total = 4
-        else:
-            final_total = dice_total
-        
-        # Calcular bônus oculto (apenas mestre vê)
         skill_id = create_serializer.validated_data.get('skill_id')
-        skill = None
-        hidden_bonus = 0
-        
-        if skill_id:
-            skill = Skill.objects.get(id=skill_id)
-            hidden_bonus += skill.bonus
-            
-            # Adicionar atributo base
-            stat_map = {
-                'forca': character.forca,
-                'destreza': character.destreza,
-                'vigor': character.vigor,
-                'inteligencia': character.inteligencia,
-                'sabedoria': character.sabedoria,
-                'carisma': character.carisma,
-            }
-            if skill.use_status.lower() in stat_map:
-                hidden_bonus += stat_map[skill.use_status.lower()]
-        
-        hidden_total = final_total + hidden_bonus
-        
-        # Criar registro da rolagem
-        roll = DiceRoll.objects.create(
+        roll = create_dice_roll(
             character=character,
-            campaign=character.campaign,
-            dice_1=dice_results[0],
-            dice_2=dice_results[1],
-            dice_3=dice_results[2],
-            dice_4=dice_results[3],
-            dice_total=dice_total,
-            used_fate_point=use_fate_point,
-            final_total=final_total,
-            skill_used=skill,
+            skill_id=skill_id,
             description=create_serializer.validated_data.get('description', ''),
-            hidden_bonus=hidden_bonus,
-            hidden_total=hidden_total,
+            use_fate_point=use_fate_point,
         )
         
         # Notificar o mestre
@@ -780,17 +1001,12 @@ class DiceRollViewSet(viewsets.ModelViewSet):
             recipient=character.campaign.owner,
             notification_type='roll',
             title='Nova Rolagem',
-            message=f'{character.name} rolou: {final_total} (Total oculto: {hidden_total})',
+            message=f'{character.name} rolou: {roll.final_total} (Total oculto: {roll.hidden_total})',
             related_character=character,
             related_roll=roll,
         )
         
-        # Retornar com serializer apropriado
-        if is_game_master(request.user):
-            serializer = DiceRollMasterSerializer(roll)
-        else:
-            serializer = DiceRollSerializer(roll)
-        
+        serializer = DiceRollMasterSerializer(roll)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=['post'])
@@ -926,6 +1142,11 @@ class AdvantageViewSet(viewsets.ModelViewSet):
             return Advantage.objects.filter(campaign_id=campaign_id)
         return Advantage.objects.all()
 
+    def perform_create(self, serializer):
+        if not is_game_master(self.request.user):
+            raise PermissionDenied('Apenas mestres podem criar vantagens.')
+        serializer.save()
+
 
 class PersonalityTraitViewSet(viewsets.ModelViewSet):
     serializer_class = PersonalityTraitSerializer
@@ -942,6 +1163,11 @@ class PersonalityTraitViewSet(viewsets.ModelViewSet):
             return PersonalityTrait.objects.filter(campaign_id=campaign_id)
         return PersonalityTrait.objects.all()
 
+    def perform_create(self, serializer):
+        if not is_game_master(self.request.user):
+            raise PermissionDenied('Apenas mestres podem criar traços.')
+        serializer.save()
+
 
 # ============== SPECIAL POWERS ==============
 
@@ -951,17 +1177,52 @@ class StandViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         character_id = self.request.query_params.get('character')
+        user = self.request.user
         if character_id:
             character = Character.objects.select_related('campaign').filter(id=character_id).first()
             if not character:
                 return Stand.objects.none()
             ensure_not_banned(self.request.user, character.campaign)
             return Stand.objects.filter(owner_character_id=character_id)
-        return Stand.objects.all()
+        qs = Stand.objects.all()
+        if not is_game_master(user):
+            return qs.filter(owner_character__owner=user)
+        return qs
 
     def perform_create(self, serializer):
-        if not is_game_master(self.request.user):
-            raise PermissionDenied('Apenas mestres podem criar Stands.')
+        character = serializer.validated_data['owner_character']
+        ensure_not_banned(self.request.user, character.campaign)
+
+        if character.campaign.campaign_type != 'jojo':
+            raise ValidationError('Stands só podem ser criados em campanhas JoJo.')
+
+        try:
+            _ = character.stand
+            raise ValidationError('Este personagem já possui um Stand.')
+        except Stand.DoesNotExist:
+            pass
+
+        if not character.stand_unlocked:
+            raise PermissionDenied('Seu Stand ainda não foi liberado.')
+
+        if is_game_master(self.request.user):
+            serializer.save()
+            return
+
+        if character.owner_id != self.request.user.id:
+            raise PermissionDenied('Este não é seu personagem.')
+        serializer.save()
+
+    def perform_update(self, serializer):
+        stand = self.get_object()
+        ensure_not_banned(self.request.user, stand.owner_character.campaign)
+        if is_game_master(self.request.user):
+            serializer.save()
+            return
+        if stand.owner_character.owner_id != self.request.user.id:
+            raise PermissionDenied('Este não é seu Stand.')
+        if not stand.owner_character.stand_unlocked:
+            raise PermissionDenied('Seu Stand ainda não foi liberado.')
         serializer.save()
 
 
@@ -1053,6 +1314,7 @@ class CampaignPollView(APIView):
             },
             'notifications': [],
             'recent_rolls': [],
+            'roll_requests': [],
         }
         
         # Notificações do usuário
@@ -1076,6 +1338,15 @@ class CampaignPollView(APIView):
             
             data['recent_rolls'] = DiceRollMasterSerializer(
                 rolls_qs.order_by('-created_at')[:10], many=True
+            ).data
+        else:
+            requests_qs = RollRequest.objects.filter(
+                campaign=campaign,
+                is_open=True,
+                character__owner=request.user,
+            )
+            data['roll_requests'] = RollRequestSerializer(
+                requests_qs.order_by('-created_at')[:10], many=True
             ).data
         
         return Response(data)

@@ -27,8 +27,11 @@ export default function CampaignPage() {
   const [npcs, setNpcs] = useState([])
   const [items, setItems] = useState([])
   const [skills, setSkills] = useState([])
+  const [traits, setTraits] = useState([])
   const [notifications, setNotifications] = useState([])
   const [projection, setProjection] = useState(null)
+  const [rollRequests, setRollRequests] = useState([])
+  const [activeRollRequest, setActiveRollRequest] = useState(null)
   
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(isGameMaster ? 'party' : 'sheet')
@@ -37,19 +40,21 @@ export default function CampaignPage() {
   // Load campaign data
   const loadData = useCallback(async () => {
     try {
-      const [campaignData, partyData, skillsData] = await Promise.all([
+      const [campaignData, partyData, skillsData, traitsData] = await Promise.all([
         api.getCampaign(id),
         api.getParty(id),
         api.getSkills(id),
+        api.getTraits(id),
       ])
       
       setCampaign(campaignData)
       setParty(partyData)
       setSkills(skillsData)
+      setTraits(traitsData)
       
       // Find my character
       if (!isGameMaster) {
-        const mine = partyData.find(c => c.owner === user?.id)
+        const mine = partyData.find(c => c.owner === user?.id || c.owner_username === user?.username)
         setMyCharacter(mine || null)
       }
       
@@ -100,6 +105,10 @@ export default function CampaignPage() {
           })
         }
         
+        if (!isGameMaster) {
+          setRollRequests(data.roll_requests || [])
+        }
+        
       } catch (err) {
         console.error('Polling error:', err)
       }
@@ -110,6 +119,10 @@ export default function CampaignPage() {
 
   const handleRollComplete = () => {
     loadData()
+    if (activeRollRequest) {
+      setRollRequests(prev => prev.filter(r => r.id !== activeRollRequest.id))
+      setActiveRollRequest(null)
+    }
     setShowRoller(false)
   }
 
@@ -155,10 +168,13 @@ export default function CampaignPage() {
               <span className="fate-value">{myCharacter.fate_points}</span>
             </div>
           )}
-          {(myCharacter || isGameMaster) && (
+          {isGameMaster && (
             <button 
               className="btn btn-primary"
-              onClick={() => setShowRoller(true)}
+              onClick={() => {
+                setActiveRollRequest(null)
+                setShowRoller(true)
+              }}
             >
               🎲 Rolar Dados
             </button>
@@ -178,6 +194,35 @@ export default function CampaignPage() {
 
         {/* Side Panel */}
         <div className="side-panel">
+          {!isGameMaster && rollRequests.length > 0 && (
+            <div className="card mb-3">
+              <h4 className="text-sm mb-2">Solicitações de Rolagem</h4>
+              <div className="list">
+                {rollRequests.map(req => (
+                  <div key={req.id} className="list-item">
+                    <div>
+                      <strong>{req.character_name}</strong>
+                      <div className="text-xs text-muted">
+                        {req.skill_name ? `Skill: ${req.skill_name}` : 'Sem skill'}
+                      </div>
+                      {req.description && (
+                        <div className="text-xs text-muted">{req.description}</div>
+                      )}
+                    </div>
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={() => {
+                        setActiveRollRequest(req)
+                        setShowRoller(true)
+                      }}
+                    >
+                      Rolar
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <div className="tabs">
             {tabs.map(tab => (
               <button
@@ -196,12 +241,14 @@ export default function CampaignPage() {
               <CharacterSheet 
                 character={myCharacter} 
                 campaign={campaign}
+                isGameMaster={isGameMaster}
                 onUpdate={loadData}
               />
             )}
             {activeTab === 'sheet' && !myCharacter && !isGameMaster && (
               <CreateCharacterPrompt 
                 campaignId={id} 
+                traits={traits}
                 onCreated={loadData}
               />
             )}
@@ -225,6 +272,7 @@ export default function CampaignPage() {
                 party={party} 
                 campaign={campaign}
                 skills={skills}
+                traits={traits}
                 onUpdate={loadData}
               />
             )}
@@ -257,10 +305,14 @@ export default function CampaignPage() {
       {showRoller && (
         <DiceRoller
           character={myCharacter || (isGameMaster ? party[0] : null)}
-          characters={isGameMaster ? [...party, ...npcs] : [myCharacter]}
+          characters={isGameMaster ? [...party, ...npcs] : (myCharacter ? [myCharacter] : [])}
           skills={skills}
           isGameMaster={isGameMaster}
-          onClose={() => setShowRoller(false)}
+          rollRequest={activeRollRequest}
+          onClose={() => {
+            setShowRoller(false)
+            setActiveRollRequest(null)
+          }}
           onComplete={handleRollComplete}
         />
       )}
@@ -284,9 +336,10 @@ function getTabLabel(tab) {
 
 // Componentes auxiliares inline (podem ser movidos para arquivos separados)
 
-function CreateCharacterPrompt({ campaignId, onCreated }) {
+function CreateCharacterPrompt({ campaignId, traits = [], onCreated }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
+  const [selectedTraits, setSelectedTraits] = useState([])
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState('')
 
@@ -303,6 +356,7 @@ function CreateCharacterPrompt({ campaignId, onCreated }) {
         name,
         description,
         campaign: parseInt(campaignId),
+        personality_trait_ids: selectedTraits,
       })
       onCreated()
     } catch (err) {
@@ -341,6 +395,37 @@ function CreateCharacterPrompt({ campaignId, onCreated }) {
             onChange={e => setDescription(e.target.value)}
           />
         </div>
+
+        {traits.length > 0 && (
+          <div className="form-group">
+            <label className="label">Traços de Personalidade (máx. 5)</label>
+            <div className="list">
+              {traits.map(trait => {
+                const checked = selectedTraits.includes(trait.id)
+                const disabled = !checked && selectedTraits.length >= 5
+                return (
+                  <label key={trait.id} className="list-item">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={disabled}
+                      onChange={e => {
+                        if (e.target.checked) {
+                          setSelectedTraits(prev => [...prev, trait.id])
+                        } else {
+                          setSelectedTraits(prev => prev.filter(id => id !== trait.id))
+                        }
+                      }}
+                    />
+                    <span className="ml-2">
+                      {trait.name} (+{trait.bonus} {trait.use_status})
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+        )}
         <button 
           type="submit" 
           className="btn btn-primary w-full"
@@ -500,6 +585,7 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [itemType, setItemType] = useState('misc')
+  const [durability, setDurability] = useState(100)
   const [ownerId, setOwnerId] = useState('')
   const [creating, setCreating] = useState(false)
 
@@ -513,11 +599,13 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
         name,
         description,
         item_type: itemType,
+        durability: parseInt(durability) || 0,
         owner_character: parseInt(ownerId),
       })
       setName('')
       setDescription('')
       setOwnerId('')
+      setDurability(100)
       onUpdate()
     } catch (err) {
       alert(err.message)
@@ -552,6 +640,14 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
             <option value="misc">Diversos</option>
           </select>
         </div>
+        <input
+          type="number"
+          className="input mt-2"
+          placeholder="Durabilidade"
+          value={durability}
+          onChange={e => setDurability(e.target.value)}
+          min="0"
+        />
         <textarea
           className="textarea input mt-2"
           placeholder="Descrição"
@@ -589,10 +685,32 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
               <div>
                 <strong>{item.name}</strong>
                 <div className="text-xs text-muted">
-                  {item.item_type} • {item.owner_character_name}
+                  {item.item_type} • {item.owner_character_name} • Durabilidade: {item.durability}
                 </div>
               </div>
-              <span className="badge">{item.quantity}x</span>
+              <div className="flex gap-2 items-center">
+                <span className="badge">{item.quantity}x</span>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={async () => {
+                    const next = prompt('Nova durabilidade:', item.durability)
+                    if (next === null) return
+                    const parsed = parseInt(next)
+                    if (Number.isNaN(parsed) || parsed < 0) {
+                      alert('Durabilidade inválida.')
+                      return
+                    }
+                    try {
+                      await api.updateItem(item.id, { durability: parsed })
+                      onUpdate()
+                    } catch (err) {
+                      alert(err.message)
+                    }
+                  }}
+                >
+                  Durabilidade
+                </button>
+              </div>
             </div>
           ))
         )}

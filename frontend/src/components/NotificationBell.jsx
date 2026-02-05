@@ -10,6 +10,7 @@ export default function NotificationBell({ notifications, onClear }) {
       case 'trade': return '🔄'
       case 'roll': return '🎲'
       case 'fate': return '✨'
+      case 'system': return '📣'
       default: return '📢'
     }
   }

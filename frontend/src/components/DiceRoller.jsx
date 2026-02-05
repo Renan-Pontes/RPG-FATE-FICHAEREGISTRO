@@ -10,12 +10,15 @@ export default function DiceRoller({
   characters, 
   skills, 
   isGameMaster,
+  rollRequest,
   onClose, 
   onComplete 
 }) {
-  const [selectedCharacter, setSelectedCharacter] = useState(character?.id || '')
-  const [selectedSkill, setSelectedSkill] = useState('')
-  const [description, setDescription] = useState('')
+  const [selectedCharacter, setSelectedCharacter] = useState(
+    rollRequest?.character || character?.id || ''
+  )
+  const [selectedSkill, setSelectedSkill] = useState(rollRequest?.skill || '')
+  const [description, setDescription] = useState(rollRequest?.description || '')
   const [useFatePoint, setUseFatePoint] = useState(false)
   
   const [rolling, setRolling] = useState(false)
@@ -24,6 +27,18 @@ export default function DiceRoller({
   const [spinningDice, setSpinningDice] = useState([false, false, false, false])
 
   const currentChar = characters?.find(c => c.id === parseInt(selectedCharacter))
+
+  useEffect(() => {
+    if (rollRequest) {
+      setSelectedCharacter(rollRequest.character)
+      setSelectedSkill(rollRequest.skill || '')
+      setDescription(rollRequest.description || '')
+      setUseFatePoint(false)
+      setResult(null)
+      setDiceResults([null, null, null, null])
+      setSpinningDice([false, false, false, false])
+    }
+  }, [rollRequest?.id])
 
   const handleRoll = async () => {
     if (!selectedCharacter) return
@@ -37,12 +52,18 @@ export default function DiceRoller({
     
     try {
       // Fazer a rolagem no servidor
-      const rollResult = await api.rollDice(
-        parseInt(selectedCharacter),
-        selectedSkill ? parseInt(selectedSkill) : null,
-        description,
-        useFatePoint
-      )
+      const rollResult = rollRequest
+        ? await api.completeRollRequest(
+            rollRequest.campaign,
+            rollRequest.id,
+            useFatePoint
+          )
+        : await api.rollDice(
+            parseInt(selectedCharacter),
+            selectedSkill ? parseInt(selectedSkill) : null,
+            description,
+            useFatePoint
+          )
       
       // Parar cada dado em sequência com delay
       const finalDice = [
@@ -88,7 +109,7 @@ export default function DiceRoller({
         
         <div className="modal-body">
           {/* Seleção de personagem (se mestre) */}
-          {isGameMaster && characters?.length > 0 && (
+          {isGameMaster && characters?.length > 0 && !rollRequest && (
             <div className="form-group">
               <label className="label">Personagem</label>
               <select
@@ -115,7 +136,7 @@ export default function DiceRoller({
                 className="input"
                 value={selectedSkill}
                 onChange={e => setSelectedSkill(e.target.value)}
-                disabled={rolling}
+                disabled={rolling || !!rollRequest}
               >
                 <option value="">Nenhuma skill</option>
                 {skills.map(s => (
@@ -136,7 +157,7 @@ export default function DiceRoller({
               placeholder="Ex: Atacar o inimigo, Convencer o guarda..."
               value={description}
               onChange={e => setDescription(e.target.value)}
-              disabled={rolling}
+              disabled={rolling || !!rollRequest}
             />
           </div>
 
@@ -217,13 +238,15 @@ export default function DiceRoller({
             </>
           ) : (
             <>
-              <button className="btn btn-secondary" onClick={() => {
-                setResult(null)
-                setDiceResults([null, null, null, null])
-                setUseFatePoint(false)
-              }}>
-                Rolar Novamente
-              </button>
+              {!rollRequest && (
+                <button className="btn btn-secondary" onClick={() => {
+                  setResult(null)
+                  setDiceResults([null, null, null, null])
+                  setUseFatePoint(false)
+                }}>
+                  Rolar Novamente
+                </button>
+              )}
               <button className="btn btn-primary" onClick={() => {
                 onComplete?.()
                 onClose()

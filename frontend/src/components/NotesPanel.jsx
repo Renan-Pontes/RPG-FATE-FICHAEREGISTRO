@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useAuth } from '../context/AuthContext'
 import * as api from '../api'
 import './NotesPanel.css'
 
-export default function NotesPanel({ character }) {
+export default function NotesPanel({ character, isGameMaster = false }) {
+  const { user } = useAuth()
   const [notes, setNotes] = useState([])
   const [newNote, setNewNote] = useState('')
   const [editingId, setEditingId] = useState(null)
@@ -72,18 +74,92 @@ export default function NotesPanel({ character }) {
     return <div className="text-muted">Selecione um personagem.</div>
   }
 
+  const masterNotes = notes.filter(n => n.is_master_note)
+  const playerNotes = notes.filter(n => !n.is_master_note)
+
+  const canEdit = (note) => note.author === user?.id
+
+  const renderNotesList = (list, emptyText) => {
+    if (list.length === 0) {
+      return <p className="text-muted text-sm">{emptyText}</p>
+    }
+    return list.map(note => (
+      <div key={note.id} className="note-item">
+        {editingId === note.id ? (
+          <div className="note-edit">
+            <textarea
+              className="textarea input"
+              value={editContent}
+              onChange={e => setEditContent(e.target.value)}
+              rows={3}
+            />
+            <div className="note-edit-actions">
+              <button 
+                className="btn btn-sm btn-secondary"
+                onClick={() => {
+                  setEditingId(null)
+                  setEditContent('')
+                }}
+              >
+                Cancelar
+              </button>
+              <button 
+                className="btn btn-sm btn-primary"
+                onClick={() => handleUpdate(note.id)}
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="note-content">{note.content}</div>
+            <div className="note-meta">
+              <span className="note-date text-xs text-muted">
+                {new Date(note.updated_at).toLocaleDateString('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })}
+              </span>
+              {canEdit(note) && (
+                <div className="note-actions">
+                  <button 
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => startEdit(note)}
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => handleDelete(note.id)}
+                  >
+                    🗑️
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    ))
+  }
+
   return (
     <div className="notes-panel">
-      <h3>📝 Notas Pessoais</h3>
+      <h3>📝 Notas</h3>
       <p className="text-muted text-sm mb-4">
-        Suas anotações sobre a campanha, eventos importantes, etc.
+        {isGameMaster
+          ? 'Notas separadas entre mestre e jogador.'
+          : 'Suas anotações sobre a campanha, eventos importantes, etc.'}
       </p>
 
       {/* Criar nova nota */}
       <div className="new-note">
         <textarea
           className="textarea input"
-          placeholder="Escreva uma nova nota..."
+          placeholder={isGameMaster ? 'Nova nota do mestre...' : 'Escreva uma nova nota...'}
           value={newNote}
           onChange={e => setNewNote(e.target.value)}
           rows={3}
@@ -97,72 +173,22 @@ export default function NotesPanel({ character }) {
         </button>
       </div>
 
-      {/* Lista de notas */}
-      <div className="notes-list">
-        {notes.length === 0 ? (
-          <p className="text-muted text-sm">Nenhuma nota ainda.</p>
-        ) : (
-          notes.map(note => (
-            <div key={note.id} className="note-item">
-              {editingId === note.id ? (
-                <div className="note-edit">
-                  <textarea
-                    className="textarea input"
-                    value={editContent}
-                    onChange={e => setEditContent(e.target.value)}
-                    rows={3}
-                  />
-                  <div className="note-edit-actions">
-                    <button 
-                      className="btn btn-sm btn-secondary"
-                      onClick={() => {
-                        setEditingId(null)
-                        setEditContent('')
-                      }}
-                    >
-                      Cancelar
-                    </button>
-                    <button 
-                      className="btn btn-sm btn-primary"
-                      onClick={() => handleUpdate(note.id)}
-                    >
-                      Salvar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="note-content">{note.content}</div>
-                  <div className="note-meta">
-                    <span className="note-date text-xs text-muted">
-                      {new Date(note.updated_at).toLocaleDateString('pt-BR', {
-                        day: '2-digit',
-                        month: '2-digit',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                      })}
-                    </span>
-                    <div className="note-actions">
-                      <button 
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => startEdit(note)}
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        className="btn btn-ghost btn-sm"
-                        onClick={() => handleDelete(note.id)}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          ))
-        )}
-      </div>
+      {isGameMaster ? (
+        <>
+          <h4 className="text-sm mt-4 mb-2">Notas do Mestre</h4>
+          <div className="notes-list">
+            {renderNotesList(masterNotes, 'Nenhuma nota do mestre ainda.')}
+          </div>
+          <h4 className="text-sm mt-4 mb-2">Notas do Jogador</h4>
+          <div className="notes-list">
+            {renderNotesList(playerNotes, 'Nenhuma nota do jogador ainda.')}
+          </div>
+        </>
+      ) : (
+        <div className="notes-list">
+          {renderNotesList(playerNotes, 'Nenhuma nota ainda.')}
+        </div>
+      )}
     </div>
   )
 }

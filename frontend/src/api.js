@@ -93,6 +93,27 @@ export async function updateCampaign(id, data) {
   })
 }
 
+export async function requestRoll(campaignId, characterId, skillId, description = '') {
+  return request(`/campaigns/${campaignId}/request_roll/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      character_id: characterId,
+      skill_id: skillId,
+      description,
+    }),
+  })
+}
+
+export async function completeRollRequest(campaignId, requestId, useFatePoint = false) {
+  return request(`/campaigns/${campaignId}/complete_roll/`, {
+    method: 'POST',
+    body: JSON.stringify({
+      request_id: requestId,
+      use_fate_point: useFatePoint,
+    }),
+  })
+}
+
 export async function removePlayerFromCampaign(campaignId, userId) {
   return request(`/campaigns/${campaignId}/remove_player/`, {
     method: 'POST',
@@ -215,6 +236,13 @@ export async function createItem(data) {
   })
 }
 
+export async function updateItem(id, data) {
+  return request(`/items/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function transferItem(itemId, toCharacterId, quantity = 1) {
   return request(`/items/${itemId}/transfer/`, {
     method: 'POST',
@@ -289,6 +317,18 @@ export async function createSkill(data) {
   })
 }
 
+export async function getTraits(campaignId) {
+  const query = campaignId ? `?campaign=${campaignId}` : ''
+  return request(`/traits/${query}`)
+}
+
+export async function createTrait(data) {
+  return request('/traits/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function getAbilities(campaignId) {
   const query = campaignId ? `?campaign=${campaignId}` : ''
   return request(`/abilities/${query}`)
@@ -310,6 +350,13 @@ export async function createStand(data) {
   })
 }
 
+export async function updateStand(id, data) {
+  return request(`/stands/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
 export async function createCursedTechnique(data) {
   return request('/cursed-techniques/', {
     method: 'POST',
@@ -319,6 +366,13 @@ export async function createCursedTechnique(data) {
 
 export async function createZanpakuto(data) {
   return request('/zanpakuto/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function setRelease(characterId, data) {
+  return request(`/characters/${characterId}/set_release/`, {
     method: 'POST',
     body: JSON.stringify(data),
   })

@@ -193,7 +193,7 @@ class CharacterNoteSerializer(serializers.ModelSerializer):
             'id', 'content', 'created_at', 'updated_at', 'character',
             'author', 'author_username', 'is_master_note',
         )
-        read_only_fields = ('id', 'created_at', 'updated_at', 'author', 'author_username')
+        read_only_fields = ('id', 'created_at', 'updated_at', 'author', 'author_username', 'is_master_note')
 
 
 class CharacterPublicSerializer(serializers.ModelSerializer):
@@ -216,6 +216,9 @@ class CharacterPublicSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'description', 'image', 'created_at',
             'fate_points', 'hierarchy', 'role', 'is_npc',
+            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
+            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
+            'shikai_active', 'bankai_active',
             'skills', 'abilities', 'advantages', 'personality_traits',
             'items', 'notes', 'stand', 'cursed_techniques', 'zanpakuto',
             'owner', 'owner_username', 'campaign',
@@ -245,29 +248,65 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
     ability_ids = serializers.PrimaryKeyRelatedField(
         queryset=Ability.objects.all(), many=True, write_only=True, source='abilities', required=False
     )
+    personality_trait_ids = serializers.PrimaryKeyRelatedField(
+        queryset=PersonalityTrait.objects.all(), many=True, write_only=True, source='personality_traits', required=False
+    )
+    advantage_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Advantage.objects.all(), many=True, write_only=True, source='advantages', required=False
+    )
 
     class Meta:
         model = Character
         fields = (
             'id', 'name', 'description', 'image', 'created_at',
             'fate_points', 'hierarchy', 'role', 'status', 'is_npc',
+            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
+            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
+            'shikai_active', 'bankai_active',
             # Stats ocultos
             'forca', 'destreza', 'vigor', 'inteligencia', 'sabedoria', 'carisma',
             # Relações
             'skills', 'abilities', 'advantages', 'personality_traits',
-            'skill_ids', 'ability_ids',
+            'skill_ids', 'ability_ids', 'advantage_ids', 'personality_trait_ids',
             'items', 'notes', 'stand', 'cursed_techniques', 'zanpakuto',
             'owner', 'owner_username', 'campaign',
         )
         read_only_fields = ('id', 'created_at', 'owner_username')
 
+    def validate(self, attrs):
+        traits = attrs.get('personality_traits')
+        if traits is not None and len(traits) > 5:
+            raise serializers.ValidationError('Cada personagem pode ter no máximo 5 traços.')
+        if traits is not None:
+            campaign = attrs.get('campaign') or getattr(self.instance, 'campaign', None)
+            if campaign:
+                for trait in traits:
+                    if trait.campaign_id and trait.campaign_id != campaign.id:
+                        raise serializers.ValidationError('Traço não pertence a esta campanha.')
+        return attrs
+
 
 class CharacterCreateSerializer(serializers.ModelSerializer):
     """Para jogador criar seu personagem"""
+    personality_trait_ids = serializers.PrimaryKeyRelatedField(
+        queryset=PersonalityTrait.objects.all(), many=True, write_only=True, source='personality_traits', required=False
+    )
     class Meta:
         model = Character
-        fields = ('id', 'name', 'description', 'image', 'campaign')
+        fields = ('id', 'name', 'description', 'image', 'campaign', 'personality_trait_ids')
         read_only_fields = ('id',)
+
+    def validate(self, attrs):
+        traits = attrs.get('personality_traits')
+        if traits is not None and len(traits) > 5:
+            raise serializers.ValidationError('Cada personagem pode ter no máximo 5 traços.')
+        if traits is not None:
+            campaign = attrs.get('campaign') or getattr(self.instance, 'campaign', None)
+            if campaign:
+                for trait in traits:
+                    if trait.campaign_id and trait.campaign_id != campaign.id:
+                        raise serializers.ValidationError('Traço não pertence a esta campanha.')
+        return attrs
 
 
 class CharacterStatsUpdateSerializer(serializers.ModelSerializer):
@@ -277,6 +316,8 @@ class CharacterStatsUpdateSerializer(serializers.ModelSerializer):
         fields = (
             'forca', 'destreza', 'vigor', 'inteligencia', 'sabedoria', 'carisma',
             'fate_points', 'status',
+            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
+            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
         )
 
 

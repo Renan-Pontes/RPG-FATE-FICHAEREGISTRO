@@ -150,6 +150,16 @@ class Character(models.Model):
     role = models.CharField(max_length=100, blank=True, default='')
     status = models.CharField(max_length=100, blank=True, default='')  # vivo, morto, etc
 
+    # Desbloqueios de campanha
+    stand_unlocked = models.BooleanField(default=False)
+    cursed_energy_unlocked = models.BooleanField(default=False)
+    cursed_energy = models.IntegerField(default=0)
+    zanpakuto_unlocked = models.BooleanField(default=False)
+    shikai_unlocked = models.BooleanField(default=False)
+    bankai_unlocked = models.BooleanField(default=False)
+    shikai_active = models.BooleanField(default=False)
+    bankai_active = models.BooleanField(default=False)
+
     # NPC = owner é o mestre da campanha
     is_npc = models.BooleanField(default=False)
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name='characters')
@@ -162,7 +172,7 @@ class Character(models.Model):
 class CharacterNote(models.Model):
     """Notas pessoais do jogador sobre seu personagem"""
     character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='notes')
-    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='character_notes')
+    author = models.ForeignKey(User, on_delete=models.CASCADE, related_name='character_notes', null=True, blank=True)
     is_master_note = models.BooleanField(default=False)
     content = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
