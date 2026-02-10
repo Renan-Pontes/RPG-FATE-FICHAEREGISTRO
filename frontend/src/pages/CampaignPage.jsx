@@ -12,7 +12,7 @@ import NotificationBell from '../components/NotificationBell'
 import './CampaignPage.css'
 
 const TABS = {
-  player: ['sheet', 'inventory', 'notes', 'trade'],
+  player: ['sheet', 'skills', 'inventory', 'notes', 'trade'],
   master: ['party', 'npcs', 'items', 'projection'],
 }
 
@@ -29,6 +29,8 @@ export default function CampaignPage() {
   const [skills, setSkills] = useState([])
   const [traits, setTraits] = useState([])
   const [notifications, setNotifications] = useState([])
+  const [skillIdeas, setSkillIdeas] = useState([])
+  const [powerIdeas, setPowerIdeas] = useState([])
   const [projection, setProjection] = useState(null)
   const [rollRequests, setRollRequests] = useState([])
   const [activeRollRequest, setActiveRollRequest] = useState(null)
@@ -40,17 +42,21 @@ export default function CampaignPage() {
   // Load campaign data
   const loadData = useCallback(async () => {
     try {
-      const [campaignData, partyData, skillsData, traitsData] = await Promise.all([
+      const [campaignData, partyData, skillsData, traitsData, ideasData, skillIdeasData] = await Promise.all([
         api.getCampaign(id),
         api.getParty(id),
         api.getSkills(id),
         api.getTraits(id),
+        api.getPowerIdeas(id),
+        api.getSkillIdeas(id),
       ])
       
       setCampaign(campaignData)
       setParty(partyData)
       setSkills(skillsData)
       setTraits(traitsData)
+      setPowerIdeas(ideasData || [])
+      setSkillIdeas(skillIdeasData || [])
       
       // Find my character
       if (!isGameMaster) {
@@ -103,6 +109,15 @@ export default function CampaignPage() {
             const filtered = prev.filter(n => !newIds.has(n.id))
             return [...data.notifications, ...filtered]
           })
+          const ideasData = await api.getPowerIdeas(id)
+          setPowerIdeas(ideasData || [])
+          const skillIdeasData = await api.getSkillIdeas(id)
+          setSkillIdeas(skillIdeasData || [])
+        }
+
+        if (!isGameMaster && myCharacter?.id) {
+          const refreshed = await api.getCharacter(myCharacter.id)
+          setMyCharacter(refreshed)
         }
         
         if (!isGameMaster) {
@@ -115,7 +130,16 @@ export default function CampaignPage() {
     }, 3000)
     
     return () => clearInterval(interval)
-  }, [id, campaign])
+  }, [id, campaign, isGameMaster, myCharacter?.id])
+
+  const handleClearNotifications = async () => {
+    try {
+      await api.markAllNotificationsRead(campaign.id)
+      setNotifications([])
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const handleRollComplete = () => {
     loadData()
@@ -160,7 +184,7 @@ export default function CampaignPage() {
         <div className="header-right">
           <NotificationBell 
             notifications={notifications} 
-            onClear={() => setNotifications([])}
+            onClear={handleClearNotifications}
           />
           {myCharacter && (
             <div className="fate-points-display">
@@ -242,6 +266,7 @@ export default function CampaignPage() {
                 character={myCharacter} 
                 campaign={campaign}
                 isGameMaster={isGameMaster}
+                powerIdeas={powerIdeas}
                 onUpdate={loadData}
               />
             )}
@@ -265,6 +290,15 @@ export default function CampaignPage() {
             {activeTab === 'trade' && (
               <TradePanel party={party} myCharacter={myCharacter} onUpdate={loadData} />
             )}
+            {activeTab === 'skills' && (
+              <SkillsPanel
+                campaignId={id}
+                character={myCharacter}
+                skills={myCharacter?.skills || []}
+                skillIdeas={skillIdeas}
+                onUpdate={loadData}
+              />
+            )}
 
             {/* Master Tabs */}
             {activeTab === 'party' && isGameMaster && (
@@ -273,6 +307,8 @@ export default function CampaignPage() {
                 campaign={campaign}
                 skills={skills}
                 traits={traits}
+                powerIdeas={powerIdeas}
+                skillIdeas={skillIdeas}
                 onUpdate={loadData}
               />
             )}
@@ -323,6 +359,7 @@ export default function CampaignPage() {
 function getTabLabel(tab) {
   const labels = {
     sheet: '📋 Ficha',
+    skills: '🧠 Skills',
     inventory: '🎒 Inventário',
     notes: '📝 Notas',
     trade: '🔄 Trocas',
@@ -347,6 +384,10 @@ function CreateCharacterPrompt({ campaignId, traits = [], onCreated }) {
     e.preventDefault()
     if (!name) {
       setError('Informe o nome do personagem.')
+      return
+    }
+    if (selectedTraits.length < 5) {
+      setError('Selecione entre 5 e 10 traços de personalidade.')
       return
     }
     
@@ -396,13 +437,13 @@ function CreateCharacterPrompt({ campaignId, traits = [], onCreated }) {
           />
         </div>
 
-        {traits.length > 0 && (
+        {traits.length > 0 ? (
           <div className="form-group">
-            <label className="label">Traços de Personalidade (máx. 5)</label>
+            <label className="label">Traços de Personalidade (min 5, max 10)</label>
             <div className="list">
               {traits.map(trait => {
                 const checked = selectedTraits.includes(trait.id)
-                const disabled = !checked && selectedTraits.length >= 5
+                const disabled = !checked && selectedTraits.length >= 10
                 return (
                   <label key={trait.id} className="list-item">
                     <input
@@ -418,18 +459,22 @@ function CreateCharacterPrompt({ campaignId, traits = [], onCreated }) {
                       }}
                     />
                     <span className="ml-2">
-                      {trait.name} (+{trait.bonus} {trait.use_status})
+                      {trait.name}
                     </span>
                   </label>
                 )
               })}
             </div>
           </div>
+        ) : (
+          <div className="alert alert-error">
+            Nenhum traço disponível. Peça ao mestre para criar traços da campanha.
+          </div>
         )}
         <button 
           type="submit" 
           className="btn btn-primary w-full"
-          disabled={creating}
+          disabled={creating || !name || selectedTraits.length < 5 || selectedTraits.length > 10}
         >
           {creating ? 'Criando...' : 'Criar Personagem'}
         </button>
@@ -488,6 +533,129 @@ function TradePanel({ party, myCharacter, onUpdate }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SkillsPanel({ campaignId, character, skills = [], skillIdeas = [], onUpdate }) {
+  const [name, setName] = useState('')
+  const [description, setDescription] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [error, setError] = useState('')
+
+  if (!character) {
+    return <div className="text-muted">Crie um personagem primeiro.</div>
+  }
+
+  const myIdeas = skillIdeas.filter(idea => idea.character === character.id)
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    if (!name.trim()) {
+      setError('Informe o nome da skill.')
+      return
+    }
+    setCreating(true)
+    try {
+      await api.createSkillIdea({
+        campaign: parseInt(campaignId),
+        character: character.id,
+        name,
+        description,
+      })
+      setName('')
+      setDescription('')
+      setError('')
+      onUpdate?.()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  return (
+    <div className="skills-panel">
+      <h3 className="mb-3">Skills</h3>
+
+      <div className="card mb-4">
+        <h4 className="text-sm mb-2">Minhas Skills</h4>
+        {skills.length === 0 ? (
+          <p className="text-muted text-sm">Nenhuma skill aprovada ainda.</p>
+        ) : (
+          <div className="list">
+            {skills.map(skill => (
+              <div key={skill.id} className="list-item">
+                <div>
+                  <strong>{skill.name}</strong>
+                  {skill.description && (
+                    <div className="text-xs text-muted">{skill.description}</div>
+                  )}
+                </div>
+                <span className="badge">Maestria: {skill.bonus ?? 0}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="card mb-4">
+        <h4 className="text-sm mb-2">Enviar Ideia de Skill</h4>
+        {error && <div className="alert alert-error">{error}</div>}
+        <form onSubmit={handleCreate}>
+          <div className="form-group">
+            <label className="label">Nome da Skill</label>
+            <input
+              type="text"
+              className="input"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="Ex: Corte Relampago"
+            />
+          </div>
+          <div className="form-group">
+            <label className="label">Descricao</label>
+            <textarea
+              className="textarea input"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="Descreva a ideia da skill..."
+              rows={3}
+            />
+          </div>
+          <button className="btn btn-primary btn-sm" disabled={creating}>
+            {creating ? 'Enviando...' : 'Enviar Ideia'}
+          </button>
+        </form>
+      </div>
+
+      <div className="card">
+        <h4 className="text-sm mb-2">Minhas Ideias</h4>
+        {myIdeas.length === 0 ? (
+          <p className="text-muted text-sm">Nenhuma ideia enviada.</p>
+        ) : (
+          <div className="list">
+            {myIdeas.map(idea => (
+              <div key={idea.id} className="list-item">
+                <div>
+                  <strong>{idea.name}</strong>
+                  {idea.description && (
+                    <div className="text-xs text-muted">{idea.description}</div>
+                  )}
+                  {idea.response_message && (
+                    <div className="text-xs text-muted">{idea.response_message}</div>
+                  )}
+                </div>
+                <span className="badge">
+                  {idea.status === 'pending' && 'Pendente'}
+                  {idea.status === 'approved' && `Aprovada • Maestria ${idea.mastery ?? 0}`}
+                  {idea.status === 'rejected' && 'Rejeitada'}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -710,6 +878,40 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
                 >
                   Durabilidade
                 </button>
+                <select
+                  className="input"
+                  style={{ width: 'auto' }}
+                  onChange={async e => {
+                    const targetId = parseInt(e.target.value)
+                    if (!targetId) return
+                    e.target.value = ''
+                    if (targetId === item.owner_character) return
+                    let quantity = 1
+                    if (item.quantity > 1) {
+                      const next = prompt('Quantidade para transferir:', '1')
+                      if (next === null) return
+                      const parsed = parseInt(next)
+                      if (Number.isNaN(parsed) || parsed <= 0 || parsed > item.quantity) {
+                        alert('Quantidade inválida.')
+                        return
+                      }
+                      quantity = parsed
+                    }
+                    try {
+                      await api.transferItem(item.id, targetId, quantity)
+                      onUpdate()
+                    } catch (err) {
+                      alert(err.message)
+                    }
+                  }}
+                >
+                  <option value="">Transferir para...</option>
+                  {party.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.is_npc ? '(NPC)' : ''}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           ))

@@ -279,6 +279,84 @@ class Zanpakuto(models.Model):
         return f"{self.name} (Zanpakutou de {self.owner_character.name})"
 
 
+class PowerIdea(models.Model):
+    """Ideias de poderes enviadas ao mestre para aprovação"""
+    IDEA_TYPES = [
+        ('stand', 'Stand'),
+        ('zanpakuto', 'Zanpakutou'),
+        ('cursed', 'Técnica Amaldiçoada'),
+    ]
+    STATUS = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Rejeitada'),
+    ]
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='power_ideas')
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='power_ideas')
+    submitted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='power_ideas_submitted')
+
+    idea_type = models.CharField(max_length=20, choices=IDEA_TYPES)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+    notes = models.TextField(blank=True, default='')
+    stand_type = models.CharField(max_length=100, blank=True, default='')
+    technique_type = models.CharField(max_length=100, blank=True, default='')
+
+    status = models.CharField(max_length=20, choices=STATUS, default='pending')
+    response_message = models.TextField(blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='power_ideas_reviewed',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Ideia {self.idea_type} de {self.character.name} ({self.status})"
+
+
+class SkillIdea(models.Model):
+    """Ideias de skills enviadas ao mestre para aprovacao"""
+    STATUS = [
+        ('pending', 'Pendente'),
+        ('approved', 'Aprovada'),
+        ('rejected', 'Rejeitada'),
+    ]
+
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='skill_ideas')
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='skill_ideas')
+    submitted_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name='skill_ideas_submitted')
+
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True, default='')
+
+    status = models.CharField(max_length=20, choices=STATUS, default='pending')
+    response_message = models.TextField(blank=True, default='')
+    mastery = models.IntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    reviewed_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='skill_ideas_reviewed',
+    )
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Ideia de skill {self.name} ({self.status})"
+
+
 class DiceRoll(models.Model):
     """Registro de rolagens de dados"""
     character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='dice_rolls')

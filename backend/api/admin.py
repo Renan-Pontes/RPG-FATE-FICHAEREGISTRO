@@ -2,7 +2,7 @@ from django.contrib import admin
 from .models import (
     Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
-    Stand, CursedTechnique, Zanpakuto,
+    Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session
 )
 
@@ -92,6 +92,20 @@ class CursedTechniqueAdmin(admin.ModelAdmin):
 class ZanpakutoAdmin(admin.ModelAdmin):
     list_display = ('name', 'owner_character', 'spirit_name')
     search_fields = ('name', 'owner_character__name')
+
+
+@admin.register(PowerIdea)
+class PowerIdeaAdmin(admin.ModelAdmin):
+    list_display = ('idea_type', 'name', 'character', 'status', 'created_at')
+    list_filter = ('idea_type', 'status', 'campaign')
+    search_fields = ('name', 'character__name', 'submitted_by__username')
+
+
+@admin.register(SkillIdea)
+class SkillIdeaAdmin(admin.ModelAdmin):
+    list_display = ('name', 'character', 'status', 'mastery', 'created_at')
+    list_filter = ('status', 'campaign')
+    search_fields = ('name', 'character__name', 'submitted_by__username')
 
 
 @admin.register(DiceRoll)

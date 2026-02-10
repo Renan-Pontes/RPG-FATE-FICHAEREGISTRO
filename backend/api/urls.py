@@ -7,7 +7,7 @@ from .views import (
     CharacterViewSet, CharacterNoteViewSet,
     ItemViewSet, DiceRollViewSet, NotificationViewSet,
     SkillViewSet, AbilityViewSet, AdvantageViewSet, PersonalityTraitViewSet,
-    StandViewSet, CursedTechniqueViewSet, ZanpakutoViewSet,
+    StandViewSet, CursedTechniqueViewSet, ZanpakutoViewSet, PowerIdeaViewSet, SkillIdeaViewSet,
     SessionViewSet,
 )
 
@@ -19,10 +19,12 @@ router.register('items', ItemViewSet, basename='item')
 router.register('rolls', DiceRollViewSet, basename='roll')
 router.register('notifications', NotificationViewSet, basename='notification')
 router.register('skills', SkillViewSet, basename='skill')
+router.register('skill-ideas', SkillIdeaViewSet, basename='skill-idea')
 router.register('abilities', AbilityViewSet, basename='ability')
 router.register('advantages', AdvantageViewSet, basename='advantage')
 router.register('traits', PersonalityTraitViewSet, basename='trait')
 router.register('stands', StandViewSet, basename='stand')
+router.register('power-ideas', PowerIdeaViewSet, basename='power-idea')
 router.register('cursed-techniques', CursedTechniqueViewSet, basename='cursed-technique')
 router.register('zanpakuto', ZanpakutoViewSet, basename='zanpakuto')
 router.register('sessions', SessionViewSet, basename='session')

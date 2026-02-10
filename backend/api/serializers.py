@@ -4,7 +4,7 @@ from rest_framework import serializers
 from .models import (
     Profile, Campaign, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
-    Stand, CursedTechnique, Zanpakuto,
+    Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session
 )
 
@@ -93,6 +93,13 @@ class SkillSerializer(serializers.ModelSerializer):
         read_only_fields = ('id',)
 
 
+class SkillPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Skill
+        fields = ('id', 'name', 'description', 'bonus', 'campaign')
+        read_only_fields = ('id',)
+
+
 class AbilitySerializer(serializers.ModelSerializer):
     class Meta:
         model = Ability
@@ -112,6 +119,43 @@ class PersonalityTraitSerializer(serializers.ModelSerializer):
         model = PersonalityTrait
         fields = ('id', 'name', 'description', 'use_status', 'bonus', 'campaign')
         read_only_fields = ('id',)
+
+
+class PersonalityTraitPublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PersonalityTrait
+        fields = ('id', 'name', 'description', 'campaign')
+        read_only_fields = ('id',)
+
+
+# ============== SKILL IDEAS ==============
+
+class SkillIdeaSerializer(serializers.ModelSerializer):
+    character_name = serializers.CharField(source='character.name', read_only=True)
+    submitted_by_username = serializers.CharField(source='submitted_by.username', read_only=True)
+    reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True)
+
+    class Meta:
+        model = SkillIdea
+        fields = (
+            'id', 'campaign', 'character', 'character_name',
+            'submitted_by', 'submitted_by_username',
+            'name', 'description', 'status',
+            'response_message', 'mastery',
+            'created_at', 'reviewed_at', 'reviewed_by', 'reviewed_by_username',
+        )
+        read_only_fields = (
+            'id', 'submitted_by', 'submitted_by_username', 'character_name',
+            'status', 'response_message', 'mastery',
+            'created_at', 'reviewed_at', 'reviewed_by', 'reviewed_by_username',
+        )
+
+    def validate(self, attrs):
+        campaign = attrs.get('campaign')
+        character = attrs.get('character')
+        if campaign and character and character.campaign_id != campaign.id:
+            raise serializers.ValidationError('Personagem nao pertence a campanha.')
+        return attrs
 
 
 # ============== ITEMS ==============
@@ -168,6 +212,13 @@ class CursedTechniqueSerializer(serializers.ModelSerializer):
         read_only_fields = ('id',)
 
 
+class CursedTechniquePublicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CursedTechnique
+        fields = ('id', 'name')
+        read_only_fields = ('id',)
+
+
 class ZanpakutoSerializer(serializers.ModelSerializer):
     shikai_abilities = AbilitySerializer(many=True, read_only=True)
     bankai_abilities = AbilitySerializer(many=True, read_only=True)
@@ -181,6 +232,37 @@ class ZanpakutoSerializer(serializers.ModelSerializer):
             'notes', 'owner_character',
         )
         read_only_fields = ('id',)
+
+
+# ============== POWER IDEAS ==============
+
+class PowerIdeaSerializer(serializers.ModelSerializer):
+    character_name = serializers.CharField(source='character.name', read_only=True)
+    submitted_by_username = serializers.CharField(source='submitted_by.username', read_only=True)
+    reviewed_by_username = serializers.CharField(source='reviewed_by.username', read_only=True)
+
+    class Meta:
+        model = PowerIdea
+        fields = (
+            'id', 'campaign', 'character', 'character_name',
+            'submitted_by', 'submitted_by_username',
+            'idea_type', 'name', 'description', 'notes',
+            'stand_type', 'technique_type',
+            'status', 'response_message',
+            'created_at', 'reviewed_at', 'reviewed_by', 'reviewed_by_username',
+        )
+        read_only_fields = (
+            'id', 'submitted_by', 'submitted_by_username', 'character_name',
+            'status', 'response_message', 'created_at', 'reviewed_at',
+            'reviewed_by', 'reviewed_by_username',
+        )
+
+    def validate(self, attrs):
+        campaign = attrs.get('campaign')
+        character = attrs.get('character')
+        if campaign and character and character.campaign_id != campaign.id:
+            raise serializers.ValidationError('Personagem não pertence à campanha.')
+        return attrs
 
 
 # ============== CHARACTER ==============
@@ -198,17 +280,17 @@ class CharacterNoteSerializer(serializers.ModelSerializer):
 
 class CharacterPublicSerializer(serializers.ModelSerializer):
     """Versão para JOGADORES - sem stats ocultos"""
-    skills = SkillSerializer(many=True, read_only=True)
+    skills = SkillPublicSerializer(many=True, read_only=True)
     abilities = AbilitySerializer(many=True, read_only=True)
     advantages = AdvantageSerializer(many=True, read_only=True)
-    personality_traits = PersonalityTraitSerializer(many=True, read_only=True)
+    personality_traits = PersonalityTraitPublicSerializer(many=True, read_only=True)
     items = ItemSerializer(many=True, read_only=True)
     notes = CharacterNoteSerializer(many=True, read_only=True)
     owner_username = serializers.CharField(source='owner.username', read_only=True)
 
     # Poderes especiais (dependendo do tipo de campanha)
     stand = StandSerializer(read_only=True)
-    cursed_techniques = CursedTechniqueSerializer(many=True, read_only=True)
+    cursed_techniques = CursedTechniquePublicSerializer(many=True, read_only=True)
     zanpakuto = ZanpakutoSerializer(read_only=True)
 
     class Meta:
@@ -216,7 +298,7 @@ class CharacterPublicSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'description', 'image', 'created_at',
             'fate_points', 'hierarchy', 'role', 'is_npc',
-            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
+            'stand_unlocked', 'cursed_energy_unlocked',
             'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
             'shikai_active', 'bankai_active',
             'skills', 'abilities', 'advantages', 'personality_traits',
@@ -275,8 +357,10 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         traits = attrs.get('personality_traits')
-        if traits is not None and len(traits) > 5:
-            raise serializers.ValidationError('Cada personagem pode ter no máximo 5 traços.')
+        if traits is not None and len(traits) < 5:
+            raise serializers.ValidationError('Cada personagem deve ter no minimo 5 tracos.')
+        if traits is not None and len(traits) > 10:
+            raise serializers.ValidationError('Cada personagem pode ter no maximo 10 tracos.')
         if traits is not None:
             campaign = attrs.get('campaign') or getattr(self.instance, 'campaign', None)
             if campaign:
@@ -289,7 +373,7 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
 class CharacterCreateSerializer(serializers.ModelSerializer):
     """Para jogador criar seu personagem"""
     personality_trait_ids = serializers.PrimaryKeyRelatedField(
-        queryset=PersonalityTrait.objects.all(), many=True, write_only=True, source='personality_traits', required=False
+        queryset=PersonalityTrait.objects.all(), many=True, write_only=True, source='personality_traits', required=True
     )
     class Meta:
         model = Character
@@ -298,8 +382,12 @@ class CharacterCreateSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         traits = attrs.get('personality_traits')
-        if traits is not None and len(traits) > 5:
-            raise serializers.ValidationError('Cada personagem pode ter no máximo 5 traços.')
+        if traits is None or len(traits) == 0:
+            raise serializers.ValidationError('Selecione pelo menos 5 tracos de personalidade.')
+        if traits is not None and len(traits) < 5:
+            raise serializers.ValidationError('Cada personagem deve ter no minimo 5 tracos.')
+        if traits is not None and len(traits) > 10:
+            raise serializers.ValidationError('Cada personagem pode ter no maximo 10 tracos.')
         if traits is not None:
             campaign = attrs.get('campaign') or getattr(self.instance, 'campaign', None)
             if campaign:

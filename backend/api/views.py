@@ -14,7 +14,7 @@ from rest_framework.views import APIView
 from .models import (
     Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
-    Stand, CursedTechnique, Zanpakuto,
+    Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session
 )
 from .serializers import (
@@ -23,8 +23,9 @@ from .serializers import (
     CharacterPublicSerializer, CharacterMasterSerializer,
     CharacterCreateSerializer, CharacterStatsUpdateSerializer,
     CharacterNoteSerializer, ItemSerializer, ItemTransferSerializer,
-    SkillSerializer, AbilitySerializer, AdvantageSerializer, PersonalityTraitSerializer,
-    StandSerializer, CursedTechniqueSerializer, ZanpakutoSerializer,
+    SkillSerializer, SkillPublicSerializer, AbilitySerializer, AdvantageSerializer, PersonalityTraitSerializer,
+    PersonalityTraitPublicSerializer, SkillIdeaSerializer,
+    StandSerializer, CursedTechniqueSerializer, CursedTechniquePublicSerializer, ZanpakutoSerializer, PowerIdeaSerializer,
     DiceRollSerializer, DiceRollMasterSerializer, DiceRollCreateSerializer, RollRequestSerializer,
     NotificationSerializer, ItemTradeSerializer, SessionSerializer,
 )
@@ -580,15 +581,15 @@ class CharacterViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Apenas o mestre pode atualizar stats.')
 
         campaign_type = character.campaign.campaign_type
-        if 'stand_unlocked' in request.data and campaign_type != 'jojo':
+        if request.data.get('stand_unlocked') and campaign_type != 'jojo':
             raise ValidationError('Stand só pode ser liberado em campanha JoJo.')
-        if 'cursed_energy_unlocked' in request.data or 'cursed_energy' in request.data:
+        if request.data.get('cursed_energy_unlocked') or int(request.data.get('cursed_energy') or 0) > 0:
             if campaign_type != 'jjk':
                 raise ValidationError('Energia amaldiçoada só existe em campanha JJK.')
         if (
-            'zanpakuto_unlocked' in request.data
-            or 'shikai_unlocked' in request.data
-            or 'bankai_unlocked' in request.data
+            request.data.get('zanpakuto_unlocked')
+            or request.data.get('shikai_unlocked')
+            or request.data.get('bankai_unlocked')
         ):
             if campaign_type != 'bleach':
                 raise ValidationError('Zanpakutou só existe em campanha Bleach.')
@@ -624,8 +625,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 campaign=character.campaign,
                 recipient=character.owner,
                 notification_type='system',
-                title='Energia Amaldiçoada Liberada',
-                message='Você despertou a energia amaldiçoada.',
+                title='Tecnica Inata Liberada',
+                message='Sua tecnica inata foi liberada.',
                 related_character=character,
             )
         if not prev['zanpakuto_unlocked'] and character.zanpakuto_unlocked:
@@ -819,7 +820,7 @@ class ItemViewSet(viewsets.ModelViewSet):
         quantity = transfer_serializer.validated_data['quantity']
         
         # Verificar se pode transferir
-        if item.owner_character.owner_id != request.user.id and not is_game_master(request.user):
+        if item.owner_character.owner_id != request.user.id and not is_campaign_master(request.user, item.owner_character.campaign):
             raise PermissionDenied('Este item não é seu.')
         
         to_character = Character.objects.get(id=to_character_id)
@@ -1100,6 +1101,11 @@ class SkillViewSet(viewsets.ModelViewSet):
             return Skill.objects.filter(campaign_id=campaign_id)
         return Skill.objects.all()
 
+    def get_serializer_class(self):
+        if is_game_master(self.request.user):
+            return SkillSerializer
+        return SkillPublicSerializer
+
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):
             raise PermissionDenied('Apenas mestres podem criar skills.')
@@ -1160,8 +1166,15 @@ class PersonalityTraitViewSet(viewsets.ModelViewSet):
             except Campaign.DoesNotExist:
                 return PersonalityTrait.objects.none()
             ensure_not_banned(self.request.user, campaign)
-            return PersonalityTrait.objects.filter(campaign_id=campaign_id)
+            return PersonalityTrait.objects.filter(
+                models.Q(campaign_id=campaign_id) | models.Q(campaign__isnull=True)
+            )
         return PersonalityTrait.objects.all()
+
+    def get_serializer_class(self):
+        if is_game_master(self.request.user):
+            return PersonalityTraitSerializer
+        return PersonalityTraitPublicSerializer
 
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):
@@ -1170,6 +1183,339 @@ class PersonalityTraitViewSet(viewsets.ModelViewSet):
 
 
 # ============== SPECIAL POWERS ==============
+
+class SkillIdeaViewSet(viewsets.ModelViewSet):
+    serializer_class = SkillIdeaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        campaign_id = self.request.query_params.get('campaign')
+        qs = SkillIdea.objects.select_related(
+            'campaign', 'character', 'submitted_by', 'reviewed_by'
+        )
+
+        if campaign_id:
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+            except Campaign.DoesNotExist:
+                return qs.none()
+            ensure_not_banned(self.request.user, campaign)
+            qs = qs.filter(campaign_id=campaign_id)
+            if is_campaign_master(self.request.user, campaign):
+                return qs
+            return qs.filter(submitted_by=self.request.user)
+
+        if is_game_master(self.request.user):
+            return qs
+        return qs.filter(submitted_by=self.request.user)
+
+    def perform_create(self, serializer):
+        character = serializer.validated_data['character']
+        campaign = serializer.validated_data.get('campaign') or character.campaign
+        ensure_not_banned(self.request.user, campaign)
+
+        if campaign.id != character.campaign_id:
+            raise ValidationError('Personagem nao pertence a campanha.')
+        if not (character.owner_id == self.request.user.id or is_campaign_master(self.request.user, campaign)):
+            raise PermissionDenied('Este nao e seu personagem.')
+
+        idea = serializer.save(
+            campaign=campaign,
+            submitted_by=self.request.user,
+            status='pending',
+        )
+
+        if campaign.owner_id != self.request.user.id:
+            Notification.objects.create(
+                campaign=campaign,
+                recipient=campaign.owner,
+                notification_type='system',
+                title='Nova Ideia de Skill',
+                message=f'{character.name} enviou uma ideia de skill: {idea.name}',
+                related_character=character,
+            )
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        idea = self.get_object()
+        ensure_not_banned(request.user, idea.campaign)
+        if not is_campaign_master(request.user, idea.campaign):
+            raise PermissionDenied('Apenas o mestre pode aprovar ideias.')
+        if idea.status != 'pending':
+            raise ValidationError('Esta ideia ja foi analisada.')
+
+        mastery_raw = request.data.get('mastery')
+        try:
+            mastery = int(mastery_raw)
+        except (TypeError, ValueError):
+            mastery = 0
+
+        if mastery < 0:
+            mastery = 0
+
+        skill = Skill.objects.create(
+            name=idea.name,
+            description=idea.description,
+            use_status='',
+            bonus=mastery,
+            campaign=idea.campaign,
+        )
+        idea.character.skills.add(skill)
+
+        idea.status = 'approved'
+        idea.mastery = mastery
+        idea.reviewed_by = request.user
+        idea.reviewed_at = timezone.now()
+        idea.response_message = f'Ideia aprovada! Maestria: {mastery}.'
+        idea.save()
+
+        Notification.objects.create(
+            campaign=idea.campaign,
+            recipient=idea.character.owner,
+            notification_type='system',
+            title='Skill Aprovada',
+            message=idea.response_message,
+            related_character=idea.character,
+        )
+
+        return Response(SkillIdeaSerializer(idea).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        idea = self.get_object()
+        ensure_not_banned(request.user, idea.campaign)
+        if not is_campaign_master(request.user, idea.campaign):
+            raise PermissionDenied('Apenas o mestre pode recusar ideias.')
+        if idea.status != 'pending':
+            raise ValidationError('Esta ideia ja foi analisada.')
+
+        reason = request.data.get('reason', '').strip()
+        response_message = reason or 'Ideia rejeitada.'
+
+        idea.status = 'rejected'
+        idea.reviewed_by = request.user
+        idea.reviewed_at = timezone.now()
+        idea.response_message = response_message
+        idea.save()
+
+        Notification.objects.create(
+            campaign=idea.campaign,
+            recipient=idea.character.owner,
+            notification_type='system',
+            title='Skill Rejeitada',
+            message=response_message,
+            related_character=idea.character,
+        )
+
+        return Response(SkillIdeaSerializer(idea).data)
+
+
+class PowerIdeaViewSet(viewsets.ModelViewSet):
+    serializer_class = PowerIdeaSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        campaign_id = self.request.query_params.get('campaign')
+        qs = PowerIdea.objects.select_related(
+            'campaign', 'character', 'submitted_by', 'reviewed_by'
+        )
+
+        if campaign_id:
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+            except Campaign.DoesNotExist:
+                return qs.none()
+            ensure_not_banned(self.request.user, campaign)
+            qs = qs.filter(campaign_id=campaign_id)
+            if is_campaign_master(self.request.user, campaign):
+                return qs
+            return qs.filter(submitted_by=self.request.user)
+
+        if is_game_master(self.request.user):
+            return qs
+        return qs.filter(submitted_by=self.request.user)
+
+    def perform_create(self, serializer):
+        character = serializer.validated_data['character']
+        campaign = serializer.validated_data.get('campaign') or character.campaign
+        ensure_not_banned(self.request.user, campaign)
+
+        if campaign.id != character.campaign_id:
+            raise ValidationError('Personagem não pertence à campanha.')
+
+        if not (character.owner_id == self.request.user.id or is_campaign_master(self.request.user, campaign)):
+            raise PermissionDenied('Este não é seu personagem.')
+
+        idea_type = serializer.validated_data['idea_type']
+        if campaign.campaign_type == 'jojo' and idea_type != 'stand':
+            raise ValidationError('Esta campanha só aceita ideias de Stand.')
+        if campaign.campaign_type == 'bleach' and idea_type != 'zanpakuto':
+            raise ValidationError('Esta campanha só aceita ideias de Zanpakutou.')
+        if campaign.campaign_type == 'jjk' and idea_type != 'cursed':
+            raise ValidationError('Esta campanha só aceita ideias de Técnica Amaldiçoada.')
+        if campaign.campaign_type == 'generic':
+            raise ValidationError('Campanhas genéricas não usam este fluxo.')
+
+        if idea_type == 'stand':
+            if Stand.objects.filter(owner_character=character).exists():
+                raise ValidationError('Este personagem já possui um Stand.')
+        if idea_type == 'zanpakuto':
+            if Zanpakuto.objects.filter(owner_character=character).exists():
+                raise ValidationError('Este personagem já possui uma Zanpakutou.')
+
+        has_pending = PowerIdea.objects.filter(
+            character=character,
+            idea_type=idea_type,
+            status='pending',
+        ).exists()
+        if has_pending:
+            raise ValidationError('Já existe uma ideia pendente para este personagem.')
+
+        idea = serializer.save(
+            campaign=campaign,
+            submitted_by=self.request.user,
+            status='pending',
+        )
+
+        # Notificar o mestre
+        if campaign.owner_id != self.request.user.id:
+            Notification.objects.create(
+                campaign=campaign,
+                recipient=campaign.owner,
+                notification_type='system',
+                title='Nova Ideia de Poder',
+                message=f'{character.name} enviou uma ideia de {idea.get_idea_type_display()}: {idea.name}',
+                related_character=character,
+            )
+
+    @action(detail=True, methods=['post'])
+    def approve(self, request, pk=None):
+        idea = self.get_object()
+        ensure_not_banned(request.user, idea.campaign)
+        if not is_campaign_master(request.user, idea.campaign):
+            raise PermissionDenied('Apenas o mestre pode aprovar ideias.')
+        if idea.status != 'pending':
+            raise ValidationError('Esta ideia já foi analisada.')
+
+        character = idea.character
+        if idea.idea_type == 'stand':
+            if Stand.objects.filter(owner_character=character).exists():
+                raise ValidationError('Este personagem já possui um Stand.')
+
+            required_fields = [
+                'destructive_power', 'speed', 'range_stat',
+                'stamina', 'precision', 'development_potential',
+            ]
+            missing = [f for f in required_fields if not request.data.get(f)]
+            if missing:
+                raise ValidationError('Informe todos os status do Stand.')
+
+            allowed = {'F', 'E', 'D', 'C', 'B', 'A', 'S'}
+            for field in required_fields:
+                val = str(request.data.get(field)).upper()
+                if val not in allowed:
+                    raise ValidationError('Status do Stand inválido.')
+
+            stand = Stand.objects.create(
+                name=idea.name,
+                description=idea.description,
+                stand_type=idea.stand_type,
+                notes=idea.notes,
+                destructive_power=str(request.data.get('destructive_power')).upper(),
+                speed=str(request.data.get('speed')).upper(),
+                range_stat=str(request.data.get('range_stat')).upper(),
+                stamina=str(request.data.get('stamina')).upper(),
+                precision=str(request.data.get('precision')).upper(),
+                development_potential=str(request.data.get('development_potential')).upper(),
+                owner_character=character,
+            )
+            response_message = (
+                'Ideia aprovada! Status do Stand: '
+                f'Poder {stand.destructive_power}, Velocidade {stand.speed}, '
+                f'Alcance {stand.range_stat}, Persistência {stand.stamina}, '
+                f'Precisão {stand.precision}, Potencial {stand.development_potential}.'
+            )
+        elif idea.idea_type == 'zanpakuto':
+            if Zanpakuto.objects.filter(owner_character=character).exists():
+                raise ValidationError('Este personagem já possui uma Zanpakutou.')
+
+            shikai_name = request.data.get('shikai_command') or '????????'
+            bankai_name = request.data.get('bankai_name') or '????????'
+
+            Zanpakuto.objects.create(
+                name=idea.name,
+                sealed_form=idea.description,
+                spirit_name='',
+                shikai_command=shikai_name,
+                shikai_description='',
+                bankai_name=bankai_name,
+                bankai_description='',
+                notes=idea.notes,
+                owner_character=character,
+            )
+            response_message = (
+                f'Ideia aprovada! Zanpakutou: {idea.name} | '
+                f'Shikai: {shikai_name} | Bankai: {bankai_name}'
+            )
+        else:
+            technique_type = request.data.get('technique_type') or idea.technique_type
+            if not technique_type:
+                raise ValidationError('Informe o tipo de técnica.')
+
+            CursedTechnique.objects.create(
+                name=idea.name,
+                description=idea.description,
+                technique_type=technique_type,
+                owner_character=character,
+            )
+            response_message = f'Ideia aprovada! Técnica: {technique_type}.'
+
+        idea.status = 'approved'
+        idea.reviewed_by = request.user
+        idea.reviewed_at = timezone.now()
+        idea.response_message = response_message
+        idea.save()
+
+        Notification.objects.create(
+            campaign=idea.campaign,
+            recipient=character.owner,
+            notification_type='system',
+            title='Ideia Aprovada',
+            message=response_message,
+            related_character=character,
+        )
+
+        return Response(PowerIdeaSerializer(idea).data)
+
+    @action(detail=True, methods=['post'])
+    def reject(self, request, pk=None):
+        idea = self.get_object()
+        ensure_not_banned(request.user, idea.campaign)
+        if not is_campaign_master(request.user, idea.campaign):
+            raise PermissionDenied('Apenas o mestre pode recusar ideias.')
+        if idea.status != 'pending':
+            raise ValidationError('Esta ideia já foi analisada.')
+
+        reason = request.data.get('reason', '').strip()
+        response_message = reason or 'Ideia rejeitada.'
+
+        idea.status = 'rejected'
+        idea.reviewed_by = request.user
+        idea.reviewed_at = timezone.now()
+        idea.response_message = response_message
+        idea.save()
+
+        Notification.objects.create(
+            campaign=idea.campaign,
+            recipient=idea.character.owner,
+            notification_type='system',
+            title='Ideia Rejeitada',
+            message=response_message,
+            related_character=idea.character,
+        )
+
+        return Response(PowerIdeaSerializer(idea).data)
+
 
 class StandViewSet(viewsets.ModelViewSet):
     serializer_class = StandSerializer
@@ -1205,12 +1551,8 @@ class StandViewSet(viewsets.ModelViewSet):
         if not character.stand_unlocked:
             raise PermissionDenied('Seu Stand ainda não foi liberado.')
 
-        if is_game_master(self.request.user):
-            serializer.save()
-            return
-
-        if character.owner_id != self.request.user.id:
-            raise PermissionDenied('Este não é seu personagem.')
+        if not is_campaign_master(self.request.user, character.campaign):
+            raise PermissionDenied('Apenas o mestre pode criar Stands após aprovação.')
         serializer.save()
 
     def perform_update(self, serializer):
@@ -1239,6 +1581,11 @@ class CursedTechniqueViewSet(viewsets.ModelViewSet):
             ensure_not_banned(self.request.user, character.campaign)
             return CursedTechnique.objects.filter(owner_character_id=character_id)
         return CursedTechnique.objects.all()
+
+    def get_serializer_class(self):
+        if is_game_master(self.request.user):
+            return CursedTechniqueSerializer
+        return CursedTechniquePublicSerializer
 
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):

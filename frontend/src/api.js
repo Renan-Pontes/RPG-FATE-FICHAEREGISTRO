@@ -303,6 +303,62 @@ export async function markAllNotificationsRead(campaignId) {
   })
 }
 
+// ============== SKILL IDEAS ==============
+
+export async function getSkillIdeas(campaignId) {
+  const query = campaignId ? `?campaign=${campaignId}` : ''
+  return request(`/skill-ideas/${query}`)
+}
+
+export async function createSkillIdea(data) {
+  return request('/skill-ideas/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function approveSkillIdea(id, data) {
+  return request(`/skill-ideas/${id}/approve/`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function rejectSkillIdea(id, reason = '') {
+  return request(`/skill-ideas/${id}/reject/`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
+// ============== POWER IDEAS ==============
+
+export async function getPowerIdeas(campaignId) {
+  const query = campaignId ? `?campaign=${campaignId}` : ''
+  return request(`/power-ideas/${query}`)
+}
+
+export async function createPowerIdea(data) {
+  return request('/power-ideas/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function approvePowerIdea(id, data) {
+  return request(`/power-ideas/${id}/approve/`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function rejectPowerIdea(id, reason = '') {
+  return request(`/power-ideas/${id}/reject/`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  })
+}
+
 // ============== SKILLS & ABILITIES ==============
 
 export async function getSkills(campaignId) {

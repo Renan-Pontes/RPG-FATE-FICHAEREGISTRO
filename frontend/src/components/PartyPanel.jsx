@@ -12,7 +12,7 @@ const STATS = [
   { key: 'carisma', label: 'CAR' },
 ]
 
-export default function PartyPanel({ party, campaign, skills, traits = [], onUpdate }) {
+export default function PartyPanel({ party, campaign, skills, traits = [], powerIdeas = [], skillIdeas = [], onUpdate }) {
   const [selectedCharacter, setSelectedCharacter] = useState(null)
   const [editStats, setEditStats] = useState({})
   const [selectedSkillIds, setSelectedSkillIds] = useState([])
@@ -31,6 +31,8 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
   const [rollSkillId, setRollSkillId] = useState('')
   const [rollDescription, setRollDescription] = useState('')
   const [requestingRoll, setRequestingRoll] = useState(false)
+  const [ideaResponses, setIdeaResponses] = useState({})
+  const [skillIdeaResponses, setSkillIdeaResponses] = useState({})
 
   const openCharacter = (char) => {
     setSelectedCharacter(char)
@@ -62,6 +64,10 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
 
   const handleSaveStats = async () => {
     if (!selectedCharacter) return
+    if (selectedTraitIds.length < 5 || selectedTraitIds.length > 10) {
+      alert('Selecione entre 5 e 10 tracos de personalidade.')
+      return
+    }
     
     setSaving(true)
     try {
@@ -185,9 +191,253 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
     }
   }
 
+  const pendingIdeas = powerIdeas.filter(idea => idea.status === 'pending')
+
+  const getTraitBonus = (char, statKey) => {
+    const key = (statKey || '').toLowerCase()
+    const traitsList = char?.personality_traits || []
+    return traitsList.reduce((sum, trait) => {
+      const traitKey = (trait.use_status || '').toLowerCase()
+      if (traitKey === key) {
+        const bonus = parseInt(trait.bonus, 10)
+        return sum + (Number.isNaN(bonus) ? 0 : bonus)
+      }
+      return sum
+    }, 0)
+  }
+
+  const getEffectiveStat = (char, statKey) => {
+    const base = char?.[statKey] || 0
+    return base + getTraitBonus(char, statKey)
+  }
+
+  const updateIdeaResponse = (ideaId, field, value) => {
+    setIdeaResponses(prev => ({
+      ...prev,
+      [ideaId]: {
+        ...(prev[ideaId] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  const updateSkillIdeaResponse = (ideaId, field, value) => {
+    setSkillIdeaResponses(prev => ({
+      ...prev,
+      [ideaId]: {
+        ...(prev[ideaId] || {}),
+        [field]: value,
+      },
+    }))
+  }
+
+  const getIdeaValue = (ideaId, field, fallback = '') => {
+    if (ideaResponses[ideaId] && ideaResponses[ideaId][field] !== undefined) {
+      return ideaResponses[ideaId][field]
+    }
+    return fallback
+  }
+
+  const handleApproveIdea = async (idea) => {
+    try {
+      if (idea.idea_type === 'stand') {
+        const data = {
+          destructive_power: getIdeaValue(idea.id, 'destructive_power', 'C'),
+          speed: getIdeaValue(idea.id, 'speed', 'C'),
+          range_stat: getIdeaValue(idea.id, 'range_stat', 'C'),
+          stamina: getIdeaValue(idea.id, 'stamina', 'C'),
+          precision: getIdeaValue(idea.id, 'precision', 'C'),
+          development_potential: getIdeaValue(idea.id, 'development_potential', 'C'),
+        }
+        await api.approvePowerIdea(idea.id, data)
+      } else if (idea.idea_type === 'zanpakuto') {
+        const data = {
+          shikai_command: getIdeaValue(idea.id, 'shikai_command', '????????'),
+          bankai_name: getIdeaValue(idea.id, 'bankai_name', '????????'),
+        }
+        await api.approvePowerIdea(idea.id, data)
+      } else {
+        const data = {
+          technique_type: getIdeaValue(idea.id, 'technique_type', idea.technique_type || ''),
+        }
+        await api.approvePowerIdea(idea.id, data)
+      }
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleRejectIdea = async (idea) => {
+    const reason = prompt('Motivo da recusa (opcional):', '') || ''
+    try {
+      await api.rejectPowerIdea(idea.id, reason)
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const pendingSkillIdeas = (skillIdeas || []).filter(idea => idea.status === 'pending')
+
+  const getSkillIdeaValue = (ideaId, field, fallback = '') => {
+    if (skillIdeaResponses[ideaId] && skillIdeaResponses[ideaId][field] !== undefined) {
+      return skillIdeaResponses[ideaId][field]
+    }
+    return fallback
+  }
+
+  const handleApproveSkillIdea = async (idea) => {
+    try {
+      const mastery = parseInt(getSkillIdeaValue(idea.id, 'mastery', '0'), 10)
+      await api.approveSkillIdea(idea.id, { mastery: Number.isNaN(mastery) ? 0 : mastery })
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
+  const handleRejectSkillIdea = async (idea) => {
+    const reason = prompt('Motivo da recusa (opcional):', '') || ''
+    try {
+      await api.rejectSkillIdea(idea.id, reason)
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    }
+  }
+
   return (
     <div className="party-panel">
       <h3>👥 Party ({party.length} jogadores)</h3>
+
+      {pendingIdeas.length > 0 && (
+        <div className="card mb-3">
+          <h4 className="text-sm mb-3">Ideias Pendentes</h4>
+          <div className="list">
+            {pendingIdeas.map(idea => (
+              <div key={idea.id} className="list-item">
+                <div>
+                  <strong>{idea.name}</strong>
+                  <div className="text-xs text-muted">
+                    {idea.idea_type} • {idea.character_name || 'Personagem'}
+                    {idea.submitted_by_username ? ` • @${idea.submitted_by_username}` : ''}
+                  </div>
+                  {idea.description && (
+                    <div className="text-xs text-muted">{idea.description}</div>
+                  )}
+                  {idea.notes && (
+                    <div className="text-xs text-muted">{idea.notes}</div>
+                  )}
+                </div>
+                <div className="flex gap-2 items-center">
+                  {idea.idea_type === 'stand' && (
+                    <div className="flex gap-1">
+                      {[
+                        ['destructive_power', 'Poder'],
+                        ['speed', 'Vel'],
+                        ['range_stat', 'Alc'],
+                        ['stamina', 'Pers'],
+                        ['precision', 'Prec'],
+                        ['development_potential', 'Pot'],
+                      ].map(([field, label]) => (
+                        <label key={field} className="text-xs">
+                          {label}
+                          <select
+                            className="input"
+                            style={{ width: 60 }}
+                            value={getIdeaValue(idea.id, field, 'C')}
+                            onChange={e => updateIdeaResponse(idea.id, field, e.target.value)}
+                          >
+                            {['F', 'E', 'D', 'C', 'B', 'A', 'S'].map(val => (
+                              <option key={val} value={val}>{val}</option>
+                            ))}
+                          </select>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  {idea.idea_type === 'zanpakuto' && (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Shikai"
+                        value={getIdeaValue(idea.id, 'shikai_command', '????????')}
+                        onChange={e => updateIdeaResponse(idea.id, 'shikai_command', e.target.value)}
+                        style={{ width: 120 }}
+                      />
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Bankai"
+                        value={getIdeaValue(idea.id, 'bankai_name', '????????')}
+                        onChange={e => updateIdeaResponse(idea.id, 'bankai_name', e.target.value)}
+                        style={{ width: 120 }}
+                      />
+                    </div>
+                  )}
+                  {idea.idea_type === 'cursed' && (
+                    <input
+                      type="text"
+                      className="input"
+                      placeholder="Tipo da técnica"
+                      value={getIdeaValue(idea.id, 'technique_type', idea.technique_type || '')}
+                      onChange={e => updateIdeaResponse(idea.id, 'technique_type', e.target.value)}
+                      style={{ width: 160 }}
+                    />
+                  )}
+                  <button className="btn btn-sm btn-primary" onClick={() => handleApproveIdea(idea)}>
+                    Aprovar
+                  </button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => handleRejectIdea(idea)}>
+                    Recusar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {pendingSkillIdeas.length > 0 && (
+        <div className="card mb-3">
+          <h4 className="text-sm mb-3">Ideias de Skills Pendentes</h4>
+          <div className="list">
+            {pendingSkillIdeas.map(idea => (
+              <div key={idea.id} className="list-item">
+                <div>
+                  <strong>{idea.name}</strong>
+                  <div className="text-xs text-muted">
+                    {idea.character_name || 'Personagem'}
+                    {idea.submitted_by_username ? ` • @${idea.submitted_by_username}` : ''}
+                  </div>
+                  {idea.description && (
+                    <div className="text-xs text-muted">{idea.description}</div>
+                  )}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="number"
+                    className="input"
+                    style={{ width: 100 }}
+                    min="0"
+                    placeholder="Maestria"
+                    value={getSkillIdeaValue(idea.id, 'mastery', '0')}
+                    onChange={e => updateSkillIdeaResponse(idea.id, 'mastery', e.target.value)}
+                  />
+                  <button className="btn btn-sm btn-primary" onClick={() => handleApproveSkillIdea(idea)}>
+                    Aprovar
+                  </button>
+                  <button className="btn btn-sm btn-ghost" onClick={() => handleRejectSkillIdea(idea)}>
+                    Recusar
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       <div className="party-list">
         {party.length === 0 ? (
@@ -231,8 +481,8 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                 {STATS.map(stat => (
                   <div key={stat.key} className="stat-mini">
                     <span className="stat-label">{stat.label}</span>
-                    <span className={`stat-val ${char[stat.key] >= 0 ? 'positive' : 'negative'}`}>
-                      {char[stat.key] >= 0 ? '+' : ''}{char[stat.key]}
+                    <span className={`stat-val ${getEffectiveStat(char, stat.key) >= 0 ? 'positive' : 'negative'}`}>
+                      {getEffectiveStat(char, stat.key) >= 0 ? '+' : ''}{getEffectiveStat(char, stat.key)}
                     </span>
                   </div>
                 ))}
@@ -244,22 +494,6 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
               >
                 Editar Stats
               </button>
-              <div className="flex gap-2 mt-2">
-                <button
-                  className="btn btn-sm btn-secondary w-full"
-                  onClick={() => handleRemovePlayer(char)}
-                  disabled={removingId === char.id || banningId === char.id}
-                >
-                  {removingId === char.id ? 'Removendo...' : 'Remover'}
-                </button>
-                <button
-                  className="btn btn-sm btn-danger w-full"
-                  onClick={() => handleBanPlayer(char)}
-                  disabled={removingId === char.id || banningId === char.id}
-                >
-                  {banningId === char.id ? 'Banindo...' : 'Banir'}
-                </button>
-              </div>
               <button
                 className="btn btn-sm btn-primary w-full mt-2"
                 onClick={() => {
@@ -362,11 +596,11 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
 
               {traits.length > 0 && (
                 <div className="form-group mt-4">
-                  <label className="label">Traços de Personalidade (máx. 5)</label>
+                  <label className="label">Traços de Personalidade (min 5, max 10)</label>
                   <div className="list">
                     {traits.map(trait => {
                       const checked = selectedTraitIds.includes(trait.id)
-                      const disabled = !checked && selectedTraitIds.length >= 5
+                      const disabled = !checked && selectedTraitIds.length >= 10
                       return (
                         <label key={trait.id} className="list-item">
                           <input
@@ -382,13 +616,13 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                             }}
                           />
                           <span className="ml-2">
-                            {trait.name} (+{trait.bonus} {trait.use_status})
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </div>
+                      {trait.name}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
               )}
 
               {campaign?.campaign_type === 'jojo' && (
@@ -453,7 +687,7 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
 
               {campaign?.campaign_type === 'jjk' && (
                 <div className="form-group mt-4">
-                  <label className="label">Energia Amaldiçoada</label>
+                  <label className="label">Tecnica Inata</label>
                   <label className="flex items-center gap-2 mb-2">
                     <input
                       type="checkbox"
@@ -463,18 +697,8 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                         cursed_energy_unlocked: e.target.checked
                       }))}
                     />
-                    <span>Energia liberada</span>
+                    <span>Tecnica liberada</span>
                   </label>
-                  <input
-                    type="number"
-                    className="input"
-                    min="0"
-                    value={editStats.cursed_energy}
-                    onChange={e => setEditStats(prev => ({
-                      ...prev,
-                      cursed_energy: parseInt(e.target.value) || 0
-                    }))}
-                  />
                 </div>
               )}
 
@@ -488,7 +712,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                         checked={editStats.zanpakuto_unlocked}
                         onChange={e => setEditStats(prev => ({
                           ...prev,
-                          zanpakuto_unlocked: e.target.checked
+                          zanpakuto_unlocked: e.target.checked,
+                          shikai_unlocked: e.target.checked ? prev.shikai_unlocked : false,
+                          bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
                         }))}
                       />
                       <span>Zanpakutou liberada</span>
@@ -499,7 +725,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                         checked={editStats.shikai_unlocked}
                         onChange={e => setEditStats(prev => ({
                           ...prev,
-                          shikai_unlocked: e.target.checked
+                          zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
+                          shikai_unlocked: e.target.checked,
+                          bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
                         }))}
                       />
                       <span>Shikai liberada</span>
@@ -510,7 +738,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
                         checked={editStats.bankai_unlocked}
                         onChange={e => setEditStats(prev => ({
                           ...prev,
-                          bankai_unlocked: e.target.checked
+                          zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
+                          shikai_unlocked: e.target.checked ? true : prev.shikai_unlocked,
+                          bankai_unlocked: e.target.checked,
                         }))}
                       />
                       <span>Bankai liberada</span>
@@ -521,6 +751,26 @@ export default function PartyPanel({ party, campaign, skills, traits = [], onUpd
               
               <div className="mt-4">
                 <NotesPanel character={selectedCharacter} isGameMaster />
+              </div>
+
+              <div className="mt-4">
+                <h4 className="text-sm mb-2">Acoes do Jogador</h4>
+                <div className="flex gap-2">
+                  <button
+                    className="btn btn-sm btn-secondary w-full"
+                    onClick={() => handleRemovePlayer(selectedCharacter)}
+                    disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
+                  >
+                    {removingId === selectedCharacter.id ? 'Removendo...' : 'Remover'}
+                  </button>
+                  <button
+                    className="btn btn-sm btn-danger w-full"
+                    onClick={() => handleBanPlayer(selectedCharacter)}
+                    disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
+                  >
+                    {banningId === selectedCharacter.id ? 'Banindo...' : 'Banir'}
+                  </button>
+                </div>
               </div>
             </div>
             <div className="modal-footer">
