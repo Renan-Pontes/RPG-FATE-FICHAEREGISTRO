@@ -1,25 +1,30 @@
 .dice-roller-modal {
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-accent);
   border-radius: var(--radius-xl);
   width: 100%;
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
-  animation: modalIn 0.2s ease;
+  animation: modalIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5), 0 0 40px rgba(201, 168, 76, 0.1);
 }
 
-/* Fate Point Toggle */
 .fate-point-toggle {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   padding: 0.75rem 1rem;
-  background: rgba(11, 110, 79, 0.1);
-  border: 1px solid rgba(11, 110, 79, 0.2);
+  background: rgba(201, 168, 76, 0.06);
+  border: 1px solid var(--border-accent);
   border-radius: var(--radius-md);
   cursor: pointer;
   margin-bottom: 1.5rem;
+  transition: all 0.2s ease;
+}
+
+.fate-point-toggle:hover {
+  background: rgba(201, 168, 76, 0.1);
 }
 
 .fate-point-toggle input {
@@ -30,47 +35,57 @@
 
 .toggle-label {
   flex: 1;
-  font-weight: 500;
+  font-weight: 600;
+  font-size: 0.9rem;
 }
 
 .fate-count {
-  padding: 0.25rem 0.5rem;
+  padding: 0.2rem 0.5rem;
   background: var(--accent);
-  color: white;
+  color: #1a1a10;
   border-radius: var(--radius-sm);
   font-size: 0.75rem;
-  font-weight: 600;
+  font-weight: 700;
 }
 
-/* Dice Area */
 .dice-area {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 1.5rem;
-  background: var(--bg-tertiary);
+  padding: 2rem 1.5rem;
+  background: var(--bg-primary);
   border-radius: var(--radius-lg);
   margin-top: 1rem;
+  border: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.dice-area::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, rgba(201, 168, 76, 0.04) 0%, transparent 70%);
+  pointer-events: none;
 }
 
 .dice-container {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.85rem;
   margin-bottom: 1.5rem;
+  position: relative;
+  z-index: 1;
 }
 
-/* Dice Slot - Estilo Cassino */
 .dice-slot {
-  width: 70px;
-  height: 90px;
-  background: linear-gradient(145deg, #1a1a1a, #0a0a0a);
-  border: 3px solid #333;
+  width: 72px;
+  height: 92px;
+  background: linear-gradient(145deg, #1a1a25, #0a0a0f);
+  border: 2px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   overflow: hidden;
   position: relative;
-  box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.5),
-    0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.6), 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 
 .dice-slot::before {
@@ -79,8 +94,8 @@
   top: 0;
   left: 0;
   right: 0;
-  height: 20px;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6), transparent);
+  height: 22px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
   z-index: 2;
   pointer-events: none;
 }
@@ -91,17 +106,15 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 20px;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+  height: 22px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.7), transparent);
   z-index: 2;
   pointer-events: none;
 }
 
 .dice-slot.fate-used {
   border-color: var(--accent);
-  box-shadow: 
-    inset 0 2px 4px rgba(0, 0, 0, 0.5),
-    0 0 20px rgba(11, 110, 79, 0.4);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5), 0 0 24px rgba(201, 168, 76, 0.3);
 }
 
 .dice-inner {
@@ -112,27 +125,26 @@
   justify-content: center;
 }
 
-/* Dice Value */
 .dice-value {
   font-size: 2.5rem;
   font-weight: 700;
   text-align: center;
-  line-height: 90px;
+  line-height: 92px;
   font-family: var(--font-display);
 }
 
 .dice-value.positive {
-  color: #10b981;
-  text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+  color: #4cba8e;
+  text-shadow: 0 0 12px rgba(76, 186, 142, 0.5);
 }
 
 .dice-value.negative {
-  color: #ef4444;
-  text-shadow: 0 0 10px rgba(239, 68, 68, 0.5);
+  color: #e05252;
+  text-shadow: 0 0 12px rgba(224, 82, 82, 0.5);
 }
 
 .dice-value.neutral {
-  color: #a0a0a0;
+  color: var(--text-secondary);
 }
 
 .dice-value.final {
@@ -140,20 +152,11 @@
 }
 
 @keyframes diceReveal {
-  0% {
-    transform: scale(1.3);
-    opacity: 0;
-  }
-  50% {
-    transform: scale(0.9);
-  }
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(1.3); opacity: 0; }
+  50% { transform: scale(0.9); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
-/* Dice Reel - Animação de Roleta */
 .dice-reel {
   display: flex;
   flex-direction: column;
@@ -161,17 +164,13 @@
 }
 
 .dice-reel .dice-value {
-  line-height: 90px;
+  line-height: 92px;
   flex-shrink: 0;
 }
 
 @keyframes slotSpin {
-  0% {
-    transform: translateY(0);
-  }
-  100% {
-    transform: translateY(-90px);
-  }
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-92px); }
 }
 
 .dice-slot.spinning {
@@ -180,13 +179,14 @@
 
 .dice-slot.spinning::before,
 .dice-slot.spinning::after {
-  background: linear-gradient(to bottom, rgba(11, 110, 79, 0.3), transparent);
+  background: linear-gradient(to bottom, rgba(201, 168, 76, 0.2), transparent);
 }
 
-/* Roll Result */
 .roll-result {
   width: 100%;
   text-align: center;
+  position: relative;
+  z-index: 1;
 }
 
 .result-total {
@@ -197,11 +197,12 @@
 }
 
 .result-label {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   color: var(--text-muted);
   margin-bottom: 0.25rem;
+  font-weight: 600;
 }
 
 .result-value {
@@ -212,37 +213,31 @@
 }
 
 .result-value.positive {
-  color: #10b981;
-  text-shadow: 0 0 30px rgba(16, 185, 129, 0.4);
+  color: var(--success);
+  text-shadow: 0 0 32px rgba(76, 186, 142, 0.4);
 }
 
 .result-value.negative {
-  color: #ef4444;
-  text-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+  color: var(--danger);
+  text-shadow: 0 0 32px rgba(224, 82, 82, 0.4);
 }
 
-/* Fate Used Badge */
 .fate-used-badge {
   display: inline-block;
   padding: 0.5rem 1rem;
-  background: linear-gradient(135deg, var(--accent), var(--accent-light));
-  color: white;
+  background: var(--gradient-accent);
+  color: #1a1a10;
   border-radius: var(--radius-md);
-  font-weight: 600;
-  font-size: 0.9rem;
+  font-weight: 700;
+  font-size: 0.85rem;
   animation: shimmer 2s infinite;
 }
 
 @keyframes shimmer {
-  0%, 100% {
-    box-shadow: 0 0 10px rgba(11, 110, 79, 0.5);
-  }
-  50% {
-    box-shadow: 0 0 25px rgba(11, 110, 79, 0.8);
-  }
+  0%, 100% { box-shadow: 0 0 12px rgba(201, 168, 76, 0.4); }
+  50% { box-shadow: 0 0 28px rgba(201, 168, 76, 0.7); }
 }
 
-/* Master Info */
 .master-info {
   display: flex;
   flex-direction: column;
@@ -253,40 +248,22 @@
 }
 
 .total-hidden {
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   color: var(--accent-light);
 }
 
 .total-hidden strong {
   font-size: 1.5rem;
+  font-family: var(--font-display);
 }
 
-/* Responsive */
 @media (max-width: 500px) {
-  .dice-slot {
-    width: 60px;
-    height: 75px;
-  }
-  
-  .dice-value {
-    font-size: 2rem;
-    line-height: 75px;
-  }
-  
-  .dice-reel .dice-value {
-    line-height: 75px;
-  }
-  
+  .dice-slot { width: 60px; height: 76px; }
+  .dice-value { font-size: 2rem; line-height: 76px; }
+  .dice-reel .dice-value { line-height: 76px; }
   @keyframes slotSpin {
-    0% {
-      transform: translateY(0);
-    }
-    100% {
-      transform: translateY(-75px);
-    }
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-76px); }
   }
-  
-  .result-value {
-    font-size: 3rem;
-  }
+  .result-value { font-size: 3rem; }
 }

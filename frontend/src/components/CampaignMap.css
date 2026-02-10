@@ -21,7 +21,7 @@
 .map-tools {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 }
 
 .map-upload {
@@ -40,19 +40,13 @@
 }
 
 .map-canvas-wrapper.draw-mode {
-  outline: 2px dashed rgba(239, 68, 68, 0.6);
+  outline: 2px dashed rgba(224, 82, 82, 0.5);
   outline-offset: -2px;
 }
 
-.map-canvas-wrapper.draw-mode .map-marker {
-  pointer-events: none;
-}
+.map-canvas-wrapper.draw-mode .map-marker { pointer-events: none; }
 
-.map-image {
-  display: block;
-  width: 100%;
-  height: auto;
-}
+.map-image { display: block; width: 100%; height: auto; }
 
 .map-canvas {
   position: absolute;
@@ -68,64 +62,38 @@
   padding: 0.25rem 0.5rem;
   border-radius: 999px;
   color: #fff;
-  font-size: 0.7rem;
-  font-weight: 600;
+  font-size: 0.68rem;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   cursor: grab;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   user-select: none;
 }
 
-.map-marker.readonly {
-  cursor: default;
-}
+.map-marker.readonly { cursor: default; }
 
 .map-marker em {
   font-style: normal;
-  font-size: 0.65rem;
-  background: rgba(255, 255, 255, 0.25);
+  font-size: 0.62rem;
+  background: rgba(255, 255, 255, 0.2);
   padding: 0 0.35rem;
   border-radius: 999px;
 }
 
 .map-empty {
-  padding: 1rem;
+  padding: 1.5rem;
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
   text-align: center;
 }
 
-.map-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.map-sessions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.session-item {
-  align-items: flex-start;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-}
-
-.session-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.session-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
+.map-groups { display: flex; flex-direction: column; gap: 0.75rem; }
+.map-sessions { display: flex; flex-direction: column; gap: 0.75rem; }
+.session-item { align-items: flex-start; gap: 0.75rem; flex-wrap: wrap; }
+.session-info { display: flex; flex-direction: column; gap: 0.2rem; }
+.session-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
 .group-card {
   border: 1px solid var(--border);
