@@ -6,19 +6,25 @@
   padding: 2rem;
   position: relative;
   overflow: hidden;
+  background: var(--bg-primary);
 }
 
+/* Animated background */
 .login-bg {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  background:
+    radial-gradient(ellipse at 70% 20%, rgba(201, 168, 76, 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 30% 80%, rgba(91, 141, 239, 0.04) 0%, transparent 50%);
 }
 
 .login-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(100px);
-  opacity: 0.3;
+  filter: blur(120px);
+  opacity: 0.2;
+  animation: orbFloat 12s ease-in-out infinite;
 }
 
 .login-orb.orb-1 {
@@ -27,20 +33,28 @@
   background: var(--accent);
   top: -150px;
   right: -100px;
+  animation-delay: 0s;
 }
 
 .login-orb.orb-2 {
   width: 400px;
   height: 400px;
-  background: #3b82f6;
+  background: #5b8def;
   bottom: -100px;
   left: -100px;
+  animation-delay: -6s;
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(20px, -15px) scale(1.05); }
+  66% { transform: translate(-15px, 10px) scale(0.95); }
 }
 
 .login-container {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 4rem;
+  gap: 5rem;
   max-width: 1000px;
   width: 100%;
   position: relative;
@@ -54,25 +68,30 @@
 }
 
 .login-hero h1 {
-  font-size: 4rem;
+  font-size: 3.5rem;
   color: var(--accent-light);
   margin-bottom: 0.5rem;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
+  background: var(--gradient-accent);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-tagline {
-  font-size: 1.2rem;
+  font-size: 1rem;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.3em;
+  letter-spacing: 0.35em;
   margin-bottom: 2rem;
+  font-weight: 500;
 }
 
 .login-description {
-  font-size: 1.1rem;
+  font-size: 1rem;
   color: var(--text-secondary);
-  line-height: 1.7;
-  margin-bottom: 2rem;
+  line-height: 1.8;
+  margin-bottom: 2.5rem;
 }
 
 .login-features {
@@ -82,12 +101,17 @@
 }
 
 .login-card {
-  max-width: 400px;
+  max-width: 420px;
+  backdrop-filter: blur(12px);
+  background: rgba(18, 18, 26, 0.85);
+  border: 1px solid var(--border-accent);
 }
 
 .login-card h2 {
-  font-size: 1.5rem;
+  font-family: var(--font-display);
+  font-size: 1.4rem;
   margin-bottom: 0.5rem;
+  letter-spacing: 0.03em;
 }
 
 .login-footer {
@@ -98,22 +122,22 @@
 @media (max-width: 900px) {
   .login-container {
     grid-template-columns: 1fr;
-    gap: 2rem;
+    gap: 2.5rem;
   }
-  
+
   .login-hero {
     text-align: center;
     align-items: center;
   }
-  
+
   .login-hero h1 {
     font-size: 2.5rem;
   }
-  
+
   .login-card {
     max-width: 100%;
   }
-  
+
   .login-features {
     justify-content: center;
   }
