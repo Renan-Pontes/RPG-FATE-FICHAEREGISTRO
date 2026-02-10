@@ -9,11 +9,13 @@ import NotesPanel from '../components/NotesPanel'
 import PartyPanel from '../components/PartyPanel'
 import ProjectionArea from '../components/ProjectionArea'
 import NotificationBell from '../components/NotificationBell'
+import CampaignMap from '../components/CampaignMap'
+import MessagesPanel from '../components/MessagesPanel'
 import './CampaignPage.css'
 
 const TABS = {
-  player: ['sheet', 'skills', 'inventory', 'notes', 'trade'],
-  master: ['party', 'npcs', 'items', 'projection'],
+  player: ['sheet', 'map', 'messages', 'skills', 'inventory', 'notes', 'trade'],
+  master: ['party', 'map', 'messages', 'npcs', 'items', 'projection'],
 }
 
 export default function CampaignPage() {
@@ -32,6 +34,9 @@ export default function CampaignPage() {
   const [skillIdeas, setSkillIdeas] = useState([])
   const [powerIdeas, setPowerIdeas] = useState([])
   const [projection, setProjection] = useState(null)
+  const [campaignMap, setCampaignMap] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [sessions, setSessions] = useState([])
   const [rollRequests, setRollRequests] = useState([])
   const [activeRollRequest, setActiveRollRequest] = useState(null)
   
@@ -42,13 +47,24 @@ export default function CampaignPage() {
   // Load campaign data
   const loadData = useCallback(async () => {
     try {
-      const [campaignData, partyData, skillsData, traitsData, ideasData, skillIdeasData] = await Promise.all([
+      const [
+        campaignData,
+        partyData,
+        skillsData,
+        traitsData,
+        ideasData,
+        skillIdeasData,
+        mapData,
+        messagesData,
+      ] = await Promise.all([
         api.getCampaign(id),
         api.getParty(id),
         api.getSkills(id),
         api.getTraits(id),
         api.getPowerIdeas(id),
         api.getSkillIdeas(id),
+        api.getMap(id),
+        api.getMessages(id),
       ])
       
       setCampaign(campaignData)
@@ -57,6 +73,8 @@ export default function CampaignPage() {
       setTraits(traitsData)
       setPowerIdeas(ideasData || [])
       setSkillIdeas(skillIdeasData || [])
+      setCampaignMap(mapData || null)
+      setMessages(messagesData || [])
       
       // Find my character
       if (!isGameMaster) {
@@ -72,6 +90,8 @@ export default function CampaignPage() {
         ])
         setNpcs(npcsData)
         setItems(itemsData)
+        const sessionsData = await api.getSessions(id)
+        setSessions(sessionsData || [])
       }
       
       // Load projection
@@ -101,6 +121,13 @@ export default function CampaignPage() {
         if (data.projection) {
           setProjection(data.projection)
         }
+
+        if (data.map?.updated_at) {
+          if (!campaignMap?.map_updated_at || data.map.updated_at !== campaignMap.map_updated_at) {
+            const mapData = await api.getMap(id)
+            setCampaignMap(mapData || null)
+          }
+        }
         
         // Update notifications
         if (data.notifications?.length > 0) {
@@ -113,6 +140,8 @@ export default function CampaignPage() {
           setPowerIdeas(ideasData || [])
           const skillIdeasData = await api.getSkillIdeas(id)
           setSkillIdeas(skillIdeasData || [])
+          const messagesData = await api.getMessages(id)
+          setMessages(messagesData || [])
         }
 
         if (!isGameMaster && myCharacter?.id) {
@@ -130,7 +159,15 @@ export default function CampaignPage() {
     }, 3000)
     
     return () => clearInterval(interval)
-  }, [id, campaign, isGameMaster, myCharacter?.id])
+  }, [id, campaign, isGameMaster, myCharacter?.id, campaignMap?.map_updated_at])
+
+  useEffect(() => {
+    if (isGameMaster) return
+    if (!rollRequests || rollRequests.length === 0) return
+    if (showRoller || activeRollRequest) return
+    setActiveRollRequest(rollRequests[0])
+    setShowRoller(true)
+  }, [rollRequests, isGameMaster, showRoller, activeRollRequest])
 
   const handleClearNotifications = async () => {
     try {
@@ -299,6 +336,25 @@ export default function CampaignPage() {
                 onUpdate={loadData}
               />
             )}
+            {activeTab === 'messages' && (
+              <MessagesPanel
+                campaign={campaign}
+                party={party}
+                messages={messages}
+                onRefresh={loadData}
+              />
+            )}
+            {activeTab === 'map' && (
+              <CampaignMap
+                campaign={campaign}
+                mapData={campaignMap}
+                sessions={sessions}
+                party={party}
+                isGameMaster={isGameMaster}
+                onMapUpdate={setCampaignMap}
+                onSessionsUpdate={setSessions}
+              />
+            )}
 
             {/* Master Tabs */}
             {activeTab === 'party' && isGameMaster && (
@@ -337,6 +393,18 @@ export default function CampaignPage() {
         </div>
       </div>
 
+      <div className="mobile-tabs">
+        {tabs.map(tab => (
+          <button
+            key={tab}
+            className={`mobile-tab ${activeTab === tab ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab)}
+          >
+            {getTabLabel(tab)}
+          </button>
+        ))}
+      </div>
+
       {/* Dice Roller Modal */}
       {showRoller && (
         <DiceRoller
@@ -359,6 +427,8 @@ export default function CampaignPage() {
 function getTabLabel(tab) {
   const labels = {
     sheet: '📋 Ficha',
+    map: '🗺️ Mapa',
+    messages: '💬 Mensagens',
     skills: '🧠 Skills',
     inventory: '🎒 Inventário',
     notes: '📝 Notas',
@@ -755,6 +825,9 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
   const [itemType, setItemType] = useState('misc')
   const [durability, setDurability] = useState(100)
   const [ownerId, setOwnerId] = useState('')
+  const [itemImage, setItemImage] = useState(null)
+  const [rarity, setRarity] = useState('common')
+  const [tags, setTags] = useState('')
   const [creating, setCreating] = useState(false)
 
   const handleCreate = async (e) => {
@@ -763,17 +836,29 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
     
     setCreating(true)
     try {
-      await api.createItem({
-        name,
-        description,
-        item_type: itemType,
-        durability: parseInt(durability) || 0,
-        owner_character: parseInt(ownerId),
-      })
+      const formData = new FormData()
+      formData.append('name', name)
+      formData.append('description', description)
+      formData.append('item_type', itemType)
+      formData.append('durability', parseInt(durability) || 0)
+      formData.append('owner_character', parseInt(ownerId))
+      formData.append('rarity', rarity)
+      const tagsList = tags
+        .split(',')
+        .map(tag => tag.trim())
+        .filter(Boolean)
+      formData.append('tags', JSON.stringify(tagsList))
+      if (itemImage) {
+        formData.append('image', itemImage)
+      }
+      await api.createItem(formData)
       setName('')
       setDescription('')
       setOwnerId('')
       setDurability(100)
+      setItemImage(null)
+      setRarity('common')
+      setTags('')
       onUpdate()
     } catch (err) {
       alert(err.message)
@@ -808,6 +893,26 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
             <option value="misc">Diversos</option>
           </select>
         </div>
+        <div className="grid grid-2 gap-2 mt-2">
+          <select
+            className="input"
+            value={rarity}
+            onChange={e => setRarity(e.target.value)}
+          >
+            <option value="common">Comum</option>
+            <option value="uncommon">Incomum</option>
+            <option value="rare">Raro</option>
+            <option value="epic">Épico</option>
+            <option value="legendary">Lendário</option>
+          </select>
+          <input
+            type="text"
+            className="input"
+            placeholder="Tags (ex: fogo, raro)"
+            value={tags}
+            onChange={e => setTags(e.target.value)}
+          />
+        </div>
         <input
           type="number"
           className="input mt-2"
@@ -815,6 +920,12 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
           value={durability}
           onChange={e => setDurability(e.target.value)}
           min="0"
+        />
+        <input
+          type="file"
+          className="input mt-2"
+          accept="image/*"
+          onChange={e => setItemImage(e.target.files?.[0] || null)}
         />
         <textarea
           className="textarea input mt-2"
@@ -850,13 +961,30 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
         ) : (
           items.map(item => (
             <div key={item.id} className="list-item">
-              <div>
-                <strong>{item.name}</strong>
-                <div className="text-xs text-muted">
-                  {item.item_type} • {item.owner_character_name} • Durabilidade: {item.durability}
+              <div className="item-row">
+                {item.image && (
+                  <img src={item.image} alt={item.name} className="item-thumb" />
+                )}
+                <div className="item-info">
+                  <strong>{item.name}</strong>
+                  <div className="text-xs text-muted">
+                    {item.item_type} • {item.owner_character_name} • Durabilidade: {item.durability}
+                  </div>
+                  <div className="item-meta">
+                    <span className={`badge item-rarity ${item.rarity || 'common'}`}>
+                      {item.rarity || 'common'}
+                    </span>
+                    {Array.isArray(item.tags) && item.tags.length > 0 && (
+                      <span className="item-tags">
+                        {item.tags.map(tag => (
+                          <span key={tag} className="badge item-tag">{tag}</span>
+                        ))}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2 items-center">
+              <div className="item-actions">
                 <span className="badge">{item.quantity}x</span>
                 <button
                   className="btn btn-sm btn-secondary"
@@ -878,6 +1006,59 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
                 >
                   Durabilidade
                 </button>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={async () => {
+                    const next = prompt('Nova raridade (common, uncommon, rare, epic, legendary):', item.rarity || 'common')
+                    if (next === null) return
+                    try {
+                      await api.updateItem(item.id, { rarity: next })
+                      onUpdate()
+                    } catch (err) {
+                      alert(err.message)
+                    }
+                  }}
+                >
+                  Raridade
+                </button>
+                <button
+                  className="btn btn-sm btn-secondary"
+                  onClick={async () => {
+                    const next = prompt('Tags separadas por vírgula:', (item.tags || []).join(', '))
+                    if (next === null) return
+                    const tagsList = next.split(',').map(tag => tag.trim()).filter(Boolean)
+                    try {
+                      await api.updateItem(item.id, { tags: tagsList })
+                      onUpdate()
+                    } catch (err) {
+                      alert(err.message)
+                    }
+                  }}
+                >
+                  Tags
+                </button>
+                <label className="btn btn-sm btn-ghost">
+                  Imagem
+                  <input
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={async e => {
+                      const file = e.target.files?.[0]
+                      if (!file) return
+                      try {
+                        const formData = new FormData()
+                        formData.append('image', file)
+                        await api.updateItem(item.id, formData)
+                        onUpdate()
+                      } catch (err) {
+                        alert(err.message)
+                      } finally {
+                        e.target.value = ''
+                      }
+                    }}
+                  />
+                </label>
                 <select
                   className="input"
                   style={{ width: 'auto' }}

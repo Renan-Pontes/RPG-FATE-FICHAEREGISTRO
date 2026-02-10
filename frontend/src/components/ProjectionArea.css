@@ -5,15 +5,19 @@
   background: var(--bg-primary);
   position: relative;
   overflow: hidden;
+  padding: 1.5rem;
 }
 
 /* Projection Content */
 .projection-content {
   width: 100%;
-  height: 100%;
+  max-width: 1100px;
+  height: 70vh;
+  max-height: 620px;
   display: flex;
   flex-direction: column;
   position: relative;
+  gap: 0.75rem;
 }
 
 .projection-image {
@@ -21,15 +25,42 @@
   height: 100%;
   object-fit: contain;
   background: #000;
+  cursor: zoom-in;
+}
+
+.projection-image.cover {
+  object-fit: cover;
+}
+
+.projection-image.contain {
+  object-fit: contain;
+}
+
+.projection-frame {
+  position: relative;
+  flex: 1;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  background: #000;
+}
+
+.projection-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  z-index: 5;
 }
 
 .projection-caption {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  padding: 1.5rem;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
 }
 
 .projection-caption p {
@@ -37,6 +68,72 @@
   font-weight: 500;
   text-align: center;
   margin: 0;
+}
+
+.projection-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  z-index: 200;
+  gap: 1rem;
+}
+
+.projection-modal-image {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+.projection-modal-close {
+  align-self: flex-end;
+}
+
+.projection-modal-caption {
+  color: #fff;
+  text-align: center;
+  max-width: 900px;
+}
+
+@media (max-width: 900px) {
+  .projection-content {
+    height: 55vh;
+    max-height: 420px;
+  }
+}
+
+@media (max-width: 600px) {
+  .projection-area {
+    padding: 1rem;
+  }
+
+  .projection-content {
+    height: 45vh;
+    max-height: 320px;
+  }
+
+  .projection-caption p {
+    font-size: 1rem;
+  }
+
+  .projection-controls {
+    top: auto;
+    bottom: 12px;
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    padding: 0.4rem;
+    border-radius: var(--radius-md);
+    background: rgba(0, 0, 0, 0.55);
+  }
+
+  .projection-frame {
+    position: relative;
+  }
 }
 
 /* Empty State */

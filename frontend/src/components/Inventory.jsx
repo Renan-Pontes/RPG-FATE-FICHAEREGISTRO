@@ -98,21 +98,40 @@ export default function Inventory({ character, party, onUpdate }) {
 
 function ItemCard({ item, onEquip, onUse, isEquipped }) {
   const icon = ITEM_TYPE_ICONS[item.item_type] || '📦'
+  const hasImage = !!item.image
 
   return (
     <div className={`item-card ${isEquipped ? 'equipped' : ''}`}>
-      <div className="item-icon">{icon}</div>
+      <div className="item-media">
+        {hasImage ? (
+          <img src={item.image} alt={item.name} />
+        ) : (
+          <div className="item-icon">{icon}</div>
+        )}
+      </div>
       <div className="item-info">
         <div className="item-name">{item.name}</div>
         {item.description && (
           <div className="item-desc text-muted text-xs">{item.description}</div>
         )}
         <div className="item-meta">
+          {item.rarity && (
+            <span className={`item-qty item-rarity ${item.rarity}`}>
+              {item.rarity}
+            </span>
+          )}
           {item.quantity > 1 && (
             <span className="item-qty">x{item.quantity}</span>
           )}
           {typeof item.durability === 'number' && (
             <span className="item-qty">Dur: {item.durability}</span>
+          )}
+          {Array.isArray(item.tags) && item.tags.length > 0 && (
+            <span className="item-tags">
+              {item.tags.map(tag => (
+                <span key={tag} className="item-tag">{tag}</span>
+              ))}
+            </span>
           )}
           {item.bonus_value > 0 && (
             <span className="item-bonus">+{item.bonus_value} {item.bonus_status}</span>

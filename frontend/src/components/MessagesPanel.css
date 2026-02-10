@@ -1,0 +1,114 @@
+.messages-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.messages-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.messages-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 1rem;
+}
+
+.messages-sidebar {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.message-player {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.message-player:hover,
+.message-player.active {
+  border-color: var(--border-hover);
+  background: var(--bg-card);
+}
+
+.messages-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.message-bubble {
+  max-width: 80%;
+  padding: 0.65rem 0.8rem;
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.message-bubble.mine {
+  align-self: flex-end;
+  background: rgba(11, 110, 79, 0.15);
+  border-color: rgba(11, 110, 79, 0.35);
+}
+
+.message-bubble.theirs {
+  align-self: flex-start;
+}
+
+.message-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.message-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .messages-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .messages-sidebar {
+    max-height: 200px;
+  }
+
+  .message-bubble {
+    max-width: 100%;
+  }
+}

@@ -46,9 +46,12 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
       fate_points: char.fate_points || 0,
       status: char.status || '',
       stand_unlocked: !!char.stand_unlocked,
+      extra_stand_slots: char.extra_stand_slots || 0,
       cursed_energy_unlocked: !!char.cursed_energy_unlocked,
       cursed_energy: char.cursed_energy || 0,
+      extra_cursed_technique_slots: char.extra_cursed_technique_slots || 0,
       zanpakuto_unlocked: !!char.zanpakuto_unlocked,
+      extra_zanpakuto_slots: char.extra_zanpakuto_slots || 0,
       shikai_unlocked: !!char.shikai_unlocked,
       bankai_unlocked: !!char.bankai_unlocked,
     })
@@ -147,6 +150,12 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
   const handleCreateStand = async (e) => {
     e.preventDefault()
     if (!selectedCharacter || !standForm.name.trim()) return
+    const current = selectedCharacter.stands?.length || 0
+    const maxSlots = 1 + (editStats.extra_stand_slots || 0)
+    if (current >= maxSlots) {
+      alert('Limite de Stands atingido para este personagem.')
+      return
+    }
 
     setCreatingStand(true)
     try {
@@ -316,8 +325,8 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
           <h4 className="text-sm mb-3">Ideias Pendentes</h4>
           <div className="list">
             {pendingIdeas.map(idea => (
-              <div key={idea.id} className="list-item">
-                <div>
+              <div key={idea.id} className="list-item idea-item">
+                <div className="idea-details">
                   <strong>{idea.name}</strong>
                   <div className="text-xs text-muted">
                     {idea.idea_type} • {idea.character_name || 'Personagem'}
@@ -330,9 +339,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                     <div className="text-xs text-muted">{idea.notes}</div>
                   )}
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="idea-actions">
                   {idea.idea_type === 'stand' && (
-                    <div className="flex gap-1">
+                    <div className="idea-stand-stats">
                       {[
                         ['destructive_power', 'Poder'],
                         ['speed', 'Vel'],
@@ -358,7 +367,7 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                     </div>
                   )}
                   {idea.idea_type === 'zanpakuto' && (
-                    <div className="flex gap-2">
+                    <div className="idea-zanpakuto">
                       <input
                         type="text"
                         className="input"
@@ -405,8 +414,8 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
           <h4 className="text-sm mb-3">Ideias de Skills Pendentes</h4>
           <div className="list">
             {pendingSkillIdeas.map(idea => (
-              <div key={idea.id} className="list-item">
-                <div>
+              <div key={idea.id} className="list-item idea-item">
+                <div className="idea-details">
                   <strong>{idea.name}</strong>
                   <div className="text-xs text-muted">
                     {idea.character_name || 'Personagem'}
@@ -416,7 +425,7 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                     <div className="text-xs text-muted">{idea.description}</div>
                   )}
                 </div>
-                <div className="flex gap-2 items-center">
+                <div className="idea-actions">
                   <input
                     type="number"
                     className="input"
@@ -639,44 +648,69 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                     />
                     <span>Stand liberado</span>
                   </label>
-                  {selectedCharacter?.stand ? (
-                    <p className="text-xs text-muted mt-2">
-                      Stand definido: {selectedCharacter.stand.name}
+                  <div className="form-group mt-2">
+                    <label className="label">Slots extras de Stand</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0"
+                      value={editStats.extra_stand_slots}
+                      onChange={e => setEditStats(prev => ({
+                        ...prev,
+                        extra_stand_slots: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      1 permite um segundo Stand.
                     </p>
-                  ) : editStats.stand_unlocked ? (
-                    <form onSubmit={handleCreateStand} className="card mt-2">
-                      <input
-                        type="text"
-                        className="input"
-                        placeholder="Nome do Stand"
-                        value={standForm.name}
-                        onChange={e => setStandForm(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                      <input
-                        type="text"
-                        className="input mt-2"
-                        placeholder="Tipo / Classe"
-                        value={standForm.stand_type}
-                        onChange={e => setStandForm(prev => ({ ...prev, stand_type: e.target.value }))}
-                      />
-                      <textarea
-                        className="textarea input mt-2"
-                        placeholder="Descrição / ideia"
-                        value={standForm.description}
-                        onChange={e => setStandForm(prev => ({ ...prev, description: e.target.value }))}
-                        rows={3}
-                      />
-                      <textarea
-                        className="textarea input mt-2"
-                        placeholder="Poderes / observações"
-                        value={standForm.notes}
-                        onChange={e => setStandForm(prev => ({ ...prev, notes: e.target.value }))}
-                        rows={3}
-                      />
-                      <button className="btn btn-sm btn-primary mt-2" disabled={creatingStand}>
-                        {creatingStand ? 'Criando...' : 'Criar Stand'}
-                      </button>
-                    </form>
+                  </div>
+                  {selectedCharacter?.stands?.length > 0 && (
+                    <p className="text-xs text-muted mt-2">
+                      Stands definidos: {selectedCharacter.stands.map(s => s.name).join(', ')}
+                    </p>
+                  )}
+                  {editStats.stand_unlocked ? (
+                    <>
+                      {((selectedCharacter?.stands?.length || 0) < (1 + (editStats.extra_stand_slots || 0))) ? (
+                        <form onSubmit={handleCreateStand} className="card mt-2">
+                          <input
+                            type="text"
+                            className="input"
+                            placeholder="Nome do Stand"
+                            value={standForm.name}
+                            onChange={e => setStandForm(prev => ({ ...prev, name: e.target.value }))}
+                          />
+                          <input
+                            type="text"
+                            className="input mt-2"
+                            placeholder="Tipo / Classe"
+                            value={standForm.stand_type}
+                            onChange={e => setStandForm(prev => ({ ...prev, stand_type: e.target.value }))}
+                          />
+                          <textarea
+                            className="textarea input mt-2"
+                            placeholder="Descrição / ideia"
+                            value={standForm.description}
+                            onChange={e => setStandForm(prev => ({ ...prev, description: e.target.value }))}
+                            rows={3}
+                          />
+                          <textarea
+                            className="textarea input mt-2"
+                            placeholder="Poderes / observações"
+                            value={standForm.notes}
+                            onChange={e => setStandForm(prev => ({ ...prev, notes: e.target.value }))}
+                            rows={3}
+                          />
+                          <button className="btn btn-sm btn-primary mt-2" disabled={creatingStand}>
+                            {creatingStand ? 'Criando...' : 'Criar Stand'}
+                          </button>
+                        </form>
+                      ) : (
+                        <p className="text-xs text-muted mt-2">
+                          Limite de Stands atingido.
+                        </p>
+                      )}
+                    </>
                   ) : (
                     <p className="text-xs text-muted mt-2">
                       Libere o Stand para definir.
@@ -699,6 +733,22 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                     />
                     <span>Tecnica liberada</span>
                   </label>
+                  <div className="form-group mt-2">
+                    <label className="label">Slots extras de Técnica</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0"
+                      value={editStats.extra_cursed_technique_slots}
+                      onChange={e => setEditStats(prev => ({
+                        ...prev,
+                        extra_cursed_technique_slots: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      1 permite uma segunda técnica.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -745,6 +795,22 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                       />
                       <span>Bankai liberada</span>
                     </label>
+                  </div>
+                  <div className="form-group mt-2">
+                    <label className="label">Slots extras de Zanpakutou</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min="0"
+                      value={editStats.extra_zanpakuto_slots}
+                      onChange={e => setEditStats(prev => ({
+                        ...prev,
+                        extra_zanpakuto_slots: parseInt(e.target.value) || 0
+                      }))}
+                    />
+                    <p className="text-xs text-muted mt-1">
+                      1 permite uma segunda Zanpakutou.
+                    </p>
                   </div>
                 </div>
               )}

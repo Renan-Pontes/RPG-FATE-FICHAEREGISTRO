@@ -140,6 +140,62 @@ export async function updateProjection(campaignId, formData) {
   })
 }
 
+export async function getMap(campaignId) {
+  return request(`/campaigns/${campaignId}/map/`)
+}
+
+export async function updateMap(campaignId, formData) {
+  return request(`/campaigns/${campaignId}/update_map/`, {
+    method: 'POST',
+    headers: headers(true, true),
+    body: formData,
+  })
+}
+
+// ============== SESSIONS ==============
+
+export async function getSessions(campaignId) {
+  const query = campaignId ? `?campaign=${campaignId}` : ''
+  return request(`/sessions/${query}`)
+}
+
+export async function createSession(data) {
+  return request('/sessions/', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function saveMapSession(sessionId) {
+  return request(`/sessions/${sessionId}/save_map/`, {
+    method: 'POST',
+  })
+}
+
+export async function loadMapSession(sessionId) {
+  return request(`/sessions/${sessionId}/load_map/`, {
+    method: 'POST',
+  })
+}
+
+// ============== MESSAGES ==============
+
+export async function getMessages(campaignId) {
+  const query = campaignId ? `?campaign=${campaignId}` : ''
+  return request(`/messages/${query}`)
+}
+
+export async function sendMessage(campaignId, recipientId, content) {
+  return request('/messages/', {
+    method: 'POST',
+    body: JSON.stringify({
+      campaign: campaignId,
+      recipient: recipientId,
+      content,
+    }),
+  })
+}
+
 export async function getParty(campaignId) {
   return request(`/campaigns/${campaignId}/party/`)
 }
@@ -230,16 +286,20 @@ export async function getItems(campaignId, characterId) {
 }
 
 export async function createItem(data) {
+  const isFormData = data instanceof FormData
   return request('/items/', {
     method: 'POST',
-    body: JSON.stringify(data),
+    headers: isFormData ? headers(true, true) : headers(),
+    body: isFormData ? data : JSON.stringify(data),
   })
 }
 
 export async function updateItem(id, data) {
+  const isFormData = data instanceof FormData
   return request(`/items/${id}/`, {
     method: 'PATCH',
-    body: JSON.stringify(data),
+    headers: isFormData ? headers(true, true) : headers(),
+    body: isFormData ? data : JSON.stringify(data),
   })
 }
 

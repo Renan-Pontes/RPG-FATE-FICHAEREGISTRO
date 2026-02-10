@@ -35,6 +35,11 @@ class Campaign(models.Model):
     projection_title = models.CharField(max_length=200, blank=True, default='')
     projection_updated_at = models.DateTimeField(auto_now=True)
 
+    # Mapa da campanha (visível aos jogadores)
+    map_image = models.ImageField(upload_to='campaign_maps/', blank=True, null=True)
+    map_data = models.JSONField(default=dict, blank=True)
+    map_updated_at = models.DateTimeField(auto_now=True)
+
     def __str__(self):
         return self.name
 
@@ -152,9 +157,12 @@ class Character(models.Model):
 
     # Desbloqueios de campanha
     stand_unlocked = models.BooleanField(default=False)
+    extra_stand_slots = models.IntegerField(default=0)
     cursed_energy_unlocked = models.BooleanField(default=False)
     cursed_energy = models.IntegerField(default=0)
+    extra_cursed_technique_slots = models.IntegerField(default=0)
     zanpakuto_unlocked = models.BooleanField(default=False)
+    extra_zanpakuto_slots = models.IntegerField(default=0)
     shikai_unlocked = models.BooleanField(default=False)
     bankai_unlocked = models.BooleanField(default=False)
     shikai_active = models.BooleanField(default=False)
@@ -192,6 +200,13 @@ class Item(models.Model):
         ('quest', 'Item de Quest'),
         ('misc', 'Diversos'),
     ]
+    RARITIES = [
+        ('common', 'Comum'),
+        ('uncommon', 'Incomum'),
+        ('rare', 'Raro'),
+        ('epic', 'Épico'),
+        ('legendary', 'Lendário'),
+    ]
 
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, default='')
@@ -199,6 +214,9 @@ class Item(models.Model):
     durability = models.IntegerField(default=100)
     is_equipped = models.BooleanField(default=False)
     quantity = models.IntegerField(default=1)
+    image = models.ImageField(upload_to='item_images/', blank=True, null=True)
+    rarity = models.CharField(max_length=20, choices=RARITIES, default='common')
+    tags = models.JSONField(default=list, blank=True)
 
     # Bônus que o item dá
     bonus_status = models.CharField(max_length=50, blank=True, default='')  # qual atributo
@@ -228,7 +246,7 @@ class Stand(models.Model):
     abilities = models.ManyToManyField(Ability, blank=True)
     notes = models.TextField(blank=True, default='')
 
-    owner_character = models.OneToOneField(Character, on_delete=models.CASCADE, related_name='stand')
+    owner_character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='stands')
 
     def __str__(self):
         return f"{self.name} (Stand de {self.owner_character.name})"
@@ -273,7 +291,7 @@ class Zanpakuto(models.Model):
 
     notes = models.TextField(blank=True, default='')
 
-    owner_character = models.OneToOneField(Character, on_delete=models.CASCADE, related_name='zanpakuto')
+    owner_character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='zanpakutos')
 
     def __str__(self):
         return f"{self.name} (Zanpakutou de {self.owner_character.name})"
@@ -427,6 +445,7 @@ class Notification(models.Model):
         ('roll', 'Rolagem de Dados'),
         ('fate', 'Uso de Fate Point'),
         ('system', 'Sistema'),
+        ('message', 'Mensagem'),
     ]
 
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='notifications')
@@ -449,6 +468,21 @@ class Notification(models.Model):
         return f"{self.title} para {self.recipient.username}"
 
 
+class Message(models.Model):
+    """Mensagens secretas entre mestre e jogadores"""
+    campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='messages_sent')
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, related_name='messages_received')
+    content = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['created_at']
+
+    def __str__(self):
+        return f"Mensagem de {self.sender.username} para {self.recipient.username}"
+
+
 class ItemTrade(models.Model):
     """Registro de trocas de itens entre jogadores"""
     item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name='trades')
@@ -467,6 +501,8 @@ class Session(models.Model):
     date = models.DateField()
     location = models.CharField(max_length=100, blank=True, default='')
     summary = models.TextField(blank=True, default='')
+    map_data = models.JSONField(default=dict, blank=True)
+    map_image = models.ImageField(upload_to='session_maps/', blank=True, null=True)
 
     def __str__(self):
         return f"Sessão de {self.campaign.name} em {self.date}"

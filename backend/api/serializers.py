@@ -5,7 +5,7 @@ from .models import (
     Profile, Campaign, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
     Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
-    DiceRoll, Notification, ItemTrade, Session
+    DiceRoll, Notification, ItemTrade, Session, Message
 )
 
 
@@ -82,6 +82,14 @@ class ProjectionSerializer(serializers.ModelSerializer):
         model = Campaign
         fields = ('projection_image', 'projection_title', 'projection_updated_at')
         read_only_fields = ('projection_updated_at',)
+
+
+class CampaignMapSerializer(serializers.ModelSerializer):
+    """Para atualizar o mapa da campanha"""
+    class Meta:
+        model = Campaign
+        fields = ('map_image', 'map_data', 'map_updated_at')
+        read_only_fields = ('map_updated_at',)
 
 
 # ============== SKILLS & ABILITIES ==============
@@ -168,7 +176,7 @@ class ItemSerializer(serializers.ModelSerializer):
         model = Item
         fields = (
             'id', 'name', 'description', 'item_type', 'durability',
-            'is_equipped', 'quantity', 'bonus_status', 'bonus_value',
+            'is_equipped', 'quantity', 'image', 'rarity', 'tags', 'bonus_status', 'bonus_value',
             'owner_character', 'owner_character_name', 'campaign_id',
         )
         read_only_fields = ('id', 'owner_character_name', 'campaign_id')
@@ -178,6 +186,21 @@ class ItemTransferSerializer(serializers.Serializer):
     """Para transferir item entre personagens"""
     to_character_id = serializers.IntegerField()
     quantity = serializers.IntegerField(default=1, min_value=1)
+
+
+# ============== MESSAGES ==============
+
+class MessageSerializer(serializers.ModelSerializer):
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    recipient_username = serializers.CharField(source='recipient.username', read_only=True)
+
+    class Meta:
+        model = Message
+        fields = (
+            'id', 'campaign', 'sender', 'sender_username',
+            'recipient', 'recipient_username', 'content', 'created_at',
+        )
+        read_only_fields = ('id', 'sender', 'sender_username', 'created_at')
 
 
 # ============== SPECIAL POWERS ==============
@@ -289,20 +312,22 @@ class CharacterPublicSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)
 
     # Poderes especiais (dependendo do tipo de campanha)
-    stand = StandSerializer(read_only=True)
+    stands = StandSerializer(many=True, read_only=True)
     cursed_techniques = CursedTechniquePublicSerializer(many=True, read_only=True)
-    zanpakuto = ZanpakutoSerializer(read_only=True)
+    zanpakutos = ZanpakutoSerializer(many=True, read_only=True)
 
     class Meta:
         model = Character
         fields = (
             'id', 'name', 'description', 'image', 'created_at',
             'fate_points', 'hierarchy', 'role', 'is_npc',
-            'stand_unlocked', 'cursed_energy_unlocked',
-            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
+            'stand_unlocked', 'extra_stand_slots',
+            'cursed_energy_unlocked', 'extra_cursed_technique_slots',
+            'zanpakuto_unlocked', 'extra_zanpakuto_slots',
+            'shikai_unlocked', 'bankai_unlocked',
             'shikai_active', 'bankai_active',
             'skills', 'abilities', 'advantages', 'personality_traits',
-            'items', 'notes', 'stand', 'cursed_techniques', 'zanpakuto',
+            'items', 'notes', 'stands', 'cursed_techniques', 'zanpakutos',
             'owner', 'owner_username', 'campaign',
         )
         read_only_fields = fields  # Jogador não edita direto
@@ -319,9 +344,9 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
     owner_username = serializers.CharField(source='owner.username', read_only=True)
 
     # Poderes especiais
-    stand = StandSerializer(read_only=True)
+    stands = StandSerializer(many=True, read_only=True)
     cursed_techniques = CursedTechniqueSerializer(many=True, read_only=True)
-    zanpakuto = ZanpakutoSerializer(read_only=True)
+    zanpakutos = ZanpakutoSerializer(many=True, read_only=True)
 
     # IDs para escrita
     skill_ids = serializers.PrimaryKeyRelatedField(
@@ -342,15 +367,17 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
         fields = (
             'id', 'name', 'description', 'image', 'created_at',
             'fate_points', 'hierarchy', 'role', 'status', 'is_npc',
-            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
-            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
+            'stand_unlocked', 'extra_stand_slots',
+            'cursed_energy_unlocked', 'cursed_energy', 'extra_cursed_technique_slots',
+            'zanpakuto_unlocked', 'extra_zanpakuto_slots',
+            'shikai_unlocked', 'bankai_unlocked',
             'shikai_active', 'bankai_active',
             # Stats ocultos
             'forca', 'destreza', 'vigor', 'inteligencia', 'sabedoria', 'carisma',
             # Relações
             'skills', 'abilities', 'advantages', 'personality_traits',
             'skill_ids', 'ability_ids', 'advantage_ids', 'personality_trait_ids',
-            'items', 'notes', 'stand', 'cursed_techniques', 'zanpakuto',
+            'items', 'notes', 'stands', 'cursed_techniques', 'zanpakutos',
             'owner', 'owner_username', 'campaign',
         )
         read_only_fields = ('id', 'created_at', 'owner_username')
@@ -404,9 +431,23 @@ class CharacterStatsUpdateSerializer(serializers.ModelSerializer):
         fields = (
             'forca', 'destreza', 'vigor', 'inteligencia', 'sabedoria', 'carisma',
             'fate_points', 'status',
-            'stand_unlocked', 'cursed_energy_unlocked', 'cursed_energy',
-            'zanpakuto_unlocked', 'shikai_unlocked', 'bankai_unlocked',
+            'stand_unlocked', 'extra_stand_slots',
+            'cursed_energy_unlocked', 'cursed_energy', 'extra_cursed_technique_slots',
+            'zanpakuto_unlocked', 'extra_zanpakuto_slots',
+            'shikai_unlocked', 'bankai_unlocked',
         )
+
+    def validate(self, attrs):
+        for key in ('extra_stand_slots', 'extra_cursed_technique_slots', 'extra_zanpakuto_slots'):
+            if key in attrs:
+                try:
+                    value = int(attrs.get(key) or 0)
+                except (TypeError, ValueError):
+                    raise serializers.ValidationError({key: 'Valor inválido.'})
+                if value < 0:
+                    raise serializers.ValidationError({key: 'Deve ser 0 ou maior.'})
+                attrs[key] = value
+        return attrs
 
 
 # ============== DICE ROLL ==============
@@ -488,5 +529,5 @@ class ItemTradeSerializer(serializers.ModelSerializer):
 class SessionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Session
-        fields = ('id', 'campaign', 'date', 'location', 'summary')
+        fields = ('id', 'campaign', 'date', 'location', 'summary', 'map_data', 'map_image')
         read_only_fields = ('id',)

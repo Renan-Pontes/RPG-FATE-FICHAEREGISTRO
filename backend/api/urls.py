@@ -8,7 +8,7 @@ from .views import (
     ItemViewSet, DiceRollViewSet, NotificationViewSet,
     SkillViewSet, AbilityViewSet, AdvantageViewSet, PersonalityTraitViewSet,
     StandViewSet, CursedTechniqueViewSet, ZanpakutoViewSet, PowerIdeaViewSet, SkillIdeaViewSet,
-    SessionViewSet,
+    SessionViewSet, MessageViewSet,
 )
 
 router = DefaultRouter()
@@ -18,6 +18,7 @@ router.register('notes', CharacterNoteViewSet, basename='note')
 router.register('items', ItemViewSet, basename='item')
 router.register('rolls', DiceRollViewSet, basename='roll')
 router.register('notifications', NotificationViewSet, basename='notification')
+router.register('messages', MessageViewSet, basename='message')
 router.register('skills', SkillViewSet, basename='skill')
 router.register('skill-ideas', SkillIdeaViewSet, basename='skill-idea')
 router.register('abilities', AbilityViewSet, basename='ability')

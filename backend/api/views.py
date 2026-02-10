@@ -15,16 +15,16 @@ from .models import (
     Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
     Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
-    DiceRoll, Notification, ItemTrade, Session
+    DiceRoll, Notification, ItemTrade, Session, Message
 )
 from .serializers import (
     RegisterSerializer, UserSerializer,
-    CampaignSerializer, CampaignListSerializer, ProjectionSerializer,
+    CampaignSerializer, CampaignListSerializer, ProjectionSerializer, CampaignMapSerializer,
     CharacterPublicSerializer, CharacterMasterSerializer,
     CharacterCreateSerializer, CharacterStatsUpdateSerializer,
     CharacterNoteSerializer, ItemSerializer, ItemTransferSerializer,
     SkillSerializer, SkillPublicSerializer, AbilitySerializer, AdvantageSerializer, PersonalityTraitSerializer,
-    PersonalityTraitPublicSerializer, SkillIdeaSerializer,
+    PersonalityTraitPublicSerializer, SkillIdeaSerializer, MessageSerializer,
     StandSerializer, CursedTechniqueSerializer, CursedTechniquePublicSerializer, ZanpakutoSerializer, PowerIdeaSerializer,
     DiceRollSerializer, DiceRollMasterSerializer, DiceRollCreateSerializer, RollRequestSerializer,
     NotificationSerializer, ItemTradeSerializer, SessionSerializer,
@@ -130,6 +130,24 @@ def create_dice_roll(*, character, skill_id=None, description='', use_fate_point
         hidden_total=hidden_total,
     )
     return roll
+
+
+def get_power_slot_info(character, idea_type):
+    """Retorna (existentes, max_slots, label) para o tipo de poder."""
+    if idea_type == 'stand':
+        existing = Stand.objects.filter(owner_character=character).count()
+        extra = max(int(character.extra_stand_slots or 0), 0)
+        label = 'Stand'
+    elif idea_type == 'zanpakuto':
+        existing = Zanpakuto.objects.filter(owner_character=character).count()
+        extra = max(int(character.extra_zanpakuto_slots or 0), 0)
+        label = 'Zanpakutou'
+    else:
+        existing = CursedTechnique.objects.filter(owner_character=character).count()
+        extra = max(int(character.extra_cursed_technique_slots or 0), 0)
+        label = 'Técnica Amaldiçoada'
+    max_slots = 1 + extra
+    return existing, max_slots, label
 
 
 # ============== AUTH ==============
@@ -474,6 +492,29 @@ class CampaignViewSet(viewsets.ModelViewSet):
         return Response(serializer.data)
 
     @action(detail=True, methods=['get'])
+    def map(self, request, pk=None):
+        """Retorna o mapa atual da campanha"""
+        campaign = self.get_object()
+        ensure_not_banned(request.user, campaign)
+        return Response({
+            'map_image': campaign.map_image.url if campaign.map_image else None,
+            'map_data': campaign.map_data or {},
+            'map_updated_at': campaign.map_updated_at,
+        })
+
+    @action(detail=True, methods=['post'])
+    def update_map(self, request, pk=None):
+        """Mestre atualiza o mapa da campanha"""
+        campaign = self.get_object()
+        if not is_campaign_master(request.user, campaign):
+            raise PermissionDenied('Apenas o mestre pode atualizar o mapa.')
+
+        serializer = CampaignMapSerializer(campaign, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['get'])
     def party(self, request, pk=None):
         """Retorna todos os personagens da campanha"""
         campaign = self.get_object()
@@ -508,7 +549,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         campaign_id = self.request.query_params.get('campaign')
         
         qs = Character.objects.select_related('campaign', 'owner').prefetch_related(
-            'skills', 'abilities', 'advantages', 'personality_traits', 'items', 'notes'
+            'skills', 'abilities', 'advantages', 'personality_traits', 'items', 'notes',
+            'stands', 'zanpakutos', 'cursed_techniques'
         )
         
         if campaign_id:
@@ -583,9 +625,13 @@ class CharacterViewSet(viewsets.ModelViewSet):
         campaign_type = character.campaign.campaign_type
         if request.data.get('stand_unlocked') and campaign_type != 'jojo':
             raise ValidationError('Stand só pode ser liberado em campanha JoJo.')
+        if int(request.data.get('extra_stand_slots') or 0) > 0 and campaign_type != 'jojo':
+            raise ValidationError('Slots de Stand só existem em campanha JoJo.')
         if request.data.get('cursed_energy_unlocked') or int(request.data.get('cursed_energy') or 0) > 0:
             if campaign_type != 'jjk':
                 raise ValidationError('Energia amaldiçoada só existe em campanha JJK.')
+        if int(request.data.get('extra_cursed_technique_slots') or 0) > 0 and campaign_type != 'jjk':
+            raise ValidationError('Slots de Técnica Amaldiçoada só existem em campanha JJK.')
         if (
             request.data.get('zanpakuto_unlocked')
             or request.data.get('shikai_unlocked')
@@ -593,6 +639,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         ):
             if campaign_type != 'bleach':
                 raise ValidationError('Zanpakutou só existe em campanha Bleach.')
+        if int(request.data.get('extra_zanpakuto_slots') or 0) > 0 and campaign_type != 'bleach':
+            raise ValidationError('Slots de Zanpakutou só existem em campanha Bleach.')
 
         if request.data.get('bankai_unlocked') and not (request.data.get('shikai_unlocked') or character.shikai_unlocked):
             raise ValidationError('Liberar Bankai requer Shikai liberado.')
@@ -860,6 +908,9 @@ class ItemViewSet(viewsets.ModelViewSet):
                     item_type=item.item_type,
                     durability=item.durability,
                     quantity=quantity,
+                    image=item.image,
+                    rarity=item.rarity,
+                    tags=item.tags,
                     bonus_status=item.bonus_status,
                     bonus_value=item.bonus_value,
                     owner_character=to_character,
@@ -1084,6 +1135,88 @@ class NotificationViewSet(viewsets.ModelViewSet):
         return Response({'status': 'Todas marcadas como lidas.'})
 
 
+# ============== MESSAGES ==============
+
+class MessageViewSet(viewsets.ModelViewSet):
+    serializer_class = MessageSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        user = self.request.user
+        campaign_id = self.request.query_params.get('campaign')
+        qs = Message.objects.select_related('campaign', 'sender', 'recipient')
+
+        if campaign_id:
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+            except Campaign.DoesNotExist:
+                return qs.none()
+            ensure_not_banned(user, campaign)
+            if is_campaign_master(user, campaign):
+                return qs.filter(campaign_id=campaign_id)
+            has_character = Character.objects.filter(
+                campaign=campaign,
+                owner=user,
+                is_npc=False,
+            ).exists()
+            if not has_character:
+                return qs.none()
+            return qs.filter(
+                campaign_id=campaign_id
+            ).filter(models.Q(sender=user) | models.Q(recipient=user))
+
+        if is_game_master(user):
+            return qs
+        return qs.filter(models.Q(sender=user) | models.Q(recipient=user))
+
+    def perform_create(self, serializer):
+        user = self.request.user
+        campaign = serializer.validated_data.get('campaign')
+        recipient = serializer.validated_data.get('recipient')
+        content = (serializer.validated_data.get('content') or '').strip()
+
+        if not campaign:
+            raise ValidationError('Campanha inválida.')
+
+        ensure_not_banned(user, campaign)
+
+        if not content:
+            raise ValidationError('Mensagem não pode ser vazia.')
+
+        if recipient.id == user.id:
+            raise ValidationError('Não é possível enviar mensagem para si mesmo.')
+
+        if is_campaign_master(user, campaign):
+            has_player = Character.objects.filter(
+                campaign=campaign,
+                owner=recipient,
+                is_npc=False,
+            ).exists()
+            if not has_player:
+                raise ValidationError('Destinatário não pertence à campanha.')
+        else:
+            has_character = Character.objects.filter(
+                campaign=campaign,
+                owner=user,
+                is_npc=False,
+            ).exists()
+            if not has_character:
+                raise PermissionDenied('Você não participa desta campanha.')
+            if recipient.id != campaign.owner_id:
+                raise PermissionDenied('Jogadores só podem enviar mensagens ao mestre.')
+
+        serializer.save(sender=user)
+
+        preview = content[:120]
+        Notification.objects.create(
+            campaign=campaign,
+            recipient=recipient,
+            notification_type='message',
+            title='Mensagem Secreta',
+            message=f'Nova mensagem de {user.username}: {preview}',
+        )
+
 # ============== SKILLS, ABILITIES, ETC ==============
 
 class SkillViewSet(viewsets.ModelViewSet):
@@ -1245,6 +1378,8 @@ class SkillIdeaViewSet(viewsets.ModelViewSet):
             raise ValidationError('Esta ideia ja foi analisada.')
 
         mastery_raw = request.data.get('mastery')
+        if mastery_raw is None:
+            raise ValidationError('Informe a maestria.')
         try:
             mastery = int(mastery_raw)
         except (TypeError, ValueError):
@@ -1356,20 +1491,16 @@ class PowerIdeaViewSet(viewsets.ModelViewSet):
         if campaign.campaign_type == 'generic':
             raise ValidationError('Campanhas genéricas não usam este fluxo.')
 
-        if idea_type == 'stand':
-            if Stand.objects.filter(owner_character=character).exists():
-                raise ValidationError('Este personagem já possui um Stand.')
-        if idea_type == 'zanpakuto':
-            if Zanpakuto.objects.filter(owner_character=character).exists():
-                raise ValidationError('Este personagem já possui uma Zanpakutou.')
-
-        has_pending = PowerIdea.objects.filter(
+        existing, max_slots, label = get_power_slot_info(character, idea_type)
+        pending = PowerIdea.objects.filter(
             character=character,
             idea_type=idea_type,
             status='pending',
-        ).exists()
-        if has_pending:
-            raise ValidationError('Já existe uma ideia pendente para este personagem.')
+        ).count()
+        if existing + pending >= max_slots:
+            raise ValidationError(
+                f'Limite de {label} atingido. Peça ao mestre para liberar outro.'
+            )
 
         idea = serializer.save(
             campaign=campaign,
@@ -1399,8 +1530,9 @@ class PowerIdeaViewSet(viewsets.ModelViewSet):
 
         character = idea.character
         if idea.idea_type == 'stand':
-            if Stand.objects.filter(owner_character=character).exists():
-                raise ValidationError('Este personagem já possui um Stand.')
+            existing, max_slots, _ = get_power_slot_info(character, 'stand')
+            if existing >= max_slots:
+                raise ValidationError('Limite de Stand atingido.')
 
             required_fields = [
                 'destructive_power', 'speed', 'range_stat',
@@ -1436,8 +1568,9 @@ class PowerIdeaViewSet(viewsets.ModelViewSet):
                 f'Precisão {stand.precision}, Potencial {stand.development_potential}.'
             )
         elif idea.idea_type == 'zanpakuto':
-            if Zanpakuto.objects.filter(owner_character=character).exists():
-                raise ValidationError('Este personagem já possui uma Zanpakutou.')
+            existing, max_slots, _ = get_power_slot_info(character, 'zanpakuto')
+            if existing >= max_slots:
+                raise ValidationError('Limite de Zanpakutou atingido.')
 
             shikai_name = request.data.get('shikai_command') or '????????'
             bankai_name = request.data.get('bankai_name') or '????????'
@@ -1458,6 +1591,9 @@ class PowerIdeaViewSet(viewsets.ModelViewSet):
                 f'Shikai: {shikai_name} | Bankai: {bankai_name}'
             )
         else:
+            existing, max_slots, _ = get_power_slot_info(character, 'cursed')
+            if existing >= max_slots:
+                raise ValidationError('Limite de Técnica Amaldiçoada atingido.')
             technique_type = request.data.get('technique_type') or idea.technique_type
             if not technique_type:
                 raise ValidationError('Informe o tipo de técnica.')
@@ -1542,11 +1678,9 @@ class StandViewSet(viewsets.ModelViewSet):
         if character.campaign.campaign_type != 'jojo':
             raise ValidationError('Stands só podem ser criados em campanhas JoJo.')
 
-        try:
-            _ = character.stand
-            raise ValidationError('Este personagem já possui um Stand.')
-        except Stand.DoesNotExist:
-            pass
+        existing, max_slots, _ = get_power_slot_info(character, 'stand')
+        if existing >= max_slots:
+            raise ValidationError('Este personagem já possui o limite de Stands.')
 
         if not character.stand_unlocked:
             raise PermissionDenied('Seu Stand ainda não foi liberado.')
@@ -1590,6 +1724,10 @@ class CursedTechniqueViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):
             raise PermissionDenied('Apenas mestres podem criar Técnicas.')
+        character = serializer.validated_data['owner_character']
+        existing, max_slots, _ = get_power_slot_info(character, 'cursed')
+        if existing >= max_slots:
+            raise ValidationError('Este personagem já possui o limite de Técnicas.')
         serializer.save()
 
 
@@ -1610,6 +1748,10 @@ class ZanpakutoViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         if not is_game_master(self.request.user):
             raise PermissionDenied('Apenas mestres podem criar Zanpakutou.')
+        character = serializer.validated_data['owner_character']
+        existing, max_slots, _ = get_power_slot_info(character, 'zanpakuto')
+        if existing >= max_slots:
+            raise ValidationError('Este personagem já possui o limite de Zanpakutou.')
         serializer.save()
 
 
@@ -1636,6 +1778,34 @@ class SessionViewSet(viewsets.ModelViewSet):
             raise PermissionDenied('Apenas o mestre pode criar sessões.')
         serializer.save()
 
+    @action(detail=True, methods=['post'])
+    def save_map(self, request, pk=None):
+        """Salva o mapa atual da campanha nesta sessão"""
+        session = self.get_object()
+        if not is_campaign_master(request.user, session.campaign):
+            raise PermissionDenied('Apenas o mestre pode salvar o mapa da sessão.')
+        campaign = session.campaign
+        session.map_data = campaign.map_data or {}
+        session.map_image = campaign.map_image
+        session.save()
+        return Response(SessionSerializer(session).data)
+
+    @action(detail=True, methods=['post'])
+    def load_map(self, request, pk=None):
+        """Carrega o mapa salvo da sessão para a campanha"""
+        session = self.get_object()
+        if not is_campaign_master(request.user, session.campaign):
+            raise PermissionDenied('Apenas o mestre pode carregar o mapa da sessão.')
+        campaign = session.campaign
+        campaign.map_data = session.map_data or {}
+        campaign.map_image = session.map_image
+        campaign.save()
+        return Response({
+            'map_image': campaign.map_image.url if campaign.map_image else None,
+            'map_data': campaign.map_data or {},
+            'map_updated_at': campaign.map_updated_at,
+        })
+
 
 # ============== POLLING ENDPOINT ==============
 
@@ -1658,6 +1828,10 @@ class CampaignPollView(APIView):
                 'image': campaign.projection_image.url if campaign.projection_image else None,
                 'title': campaign.projection_title,
                 'updated_at': campaign.projection_updated_at,
+            },
+            'map': {
+                'image': campaign.map_image.url if campaign.map_image else None,
+                'updated_at': campaign.map_updated_at,
             },
             'notifications': [],
             'recent_rolls': [],

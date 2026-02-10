@@ -40,9 +40,21 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
   const pendingIdeas = powerIdeas.filter(
     idea => idea.character === character.id && idea.status === 'pending'
   )
-  const pendingStandIdea = pendingIdeas.find(idea => idea.idea_type === 'stand')
-  const pendingZanpakutoIdea = pendingIdeas.find(idea => idea.idea_type === 'zanpakuto')
-  const pendingCursedIdea = pendingIdeas.find(idea => idea.idea_type === 'cursed')
+  const pendingStandIdeas = pendingIdeas.filter(idea => idea.idea_type === 'stand')
+  const pendingZanpakutoIdeas = pendingIdeas.filter(idea => idea.idea_type === 'zanpakuto')
+  const pendingCursedIdeas = pendingIdeas.filter(idea => idea.idea_type === 'cursed')
+
+  const stands = character.stands || []
+  const zanpakutos = character.zanpakutos || []
+  const cursedTechniques = character.cursed_techniques || []
+
+  const standSlots = 1 + (character.extra_stand_slots || 0)
+  const zanpakutoSlots = 1 + (character.extra_zanpakuto_slots || 0)
+  const cursedSlots = 1 + (character.extra_cursed_technique_slots || 0)
+
+  const canCreateStand = (stands.length + pendingStandIdeas.length) < standSlots
+  const canCreateZanpakuto = (zanpakutos.length + pendingZanpakutoIdeas.length) < zanpakutoSlots
+  const canCreateCursed = (cursedTechniques.length + pendingCursedIdeas.length) < cursedSlots
 
   const handleCreateStand = async (e) => {
     e.preventDefault()
@@ -225,39 +237,47 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
       )}
 
       {/* Poderes Especiais baseados no tipo de campanha */}
-      {campaign?.campaign_type === 'jojo' && character.stand && (
+      {campaign?.campaign_type === 'jojo' && (
         <div className="sheet-section special-power">
-          <h4 className="section-title">⭐ Stand: {character.stand.name}</h4>
-          {!character.stand_unlocked ? (
+          <h4 className="section-title">⭐ Stands</h4>
+          {!character.stand_unlocked && (
             <p className="text-sm text-muted">
               Stand selado. Aguardando liberação do mestre.
             </p>
-          ) : (
-            <>
-              <div className="text-xs text-muted mb-2">Status: Liberado</div>
-              <p className="text-sm text-muted">{character.stand.description}</p>
-              <div className="stand-stats">
-                <StandStat label="Poder" value={character.stand.destructive_power} />
-                <StandStat label="Velocidade" value={character.stand.speed} />
-                <StandStat label="Alcance" value={character.stand.range_stat} />
-                <StandStat label="Persistência" value={character.stand.stamina} />
-                <StandStat label="Precisão" value={character.stand.precision} />
-                <StandStat label="Potencial" value={character.stand.development_potential} />
-              </div>
-            </>
           )}
-        </div>
-      )}
-
-      {campaign?.campaign_type === 'jojo' && !character.stand && (
-        <div className="sheet-section special-power">
-          <h4 className="section-title">⭐ Stand</h4>
-          {pendingStandIdea ? (
-            <div className="text-sm text-muted">
-              Ideia enviada: <strong>{pendingStandIdea.name}</strong> (aguardando aprovação).
+          {stands.length > 0 ? (
+            <div className="mt-2">
+              {stands.map((stand, index) => (
+                <div key={stand.id || index} className="technique-item">
+                  <strong>Stand {stand.name}</strong>
+                  {character.stand_unlocked ? (
+                    <>
+                      <p className="text-sm text-muted">{stand.description}</p>
+                      <div className="stand-stats">
+                        <StandStat label="Poder" value={stand.destructive_power} />
+                        <StandStat label="Velocidade" value={stand.speed} />
+                        <StandStat label="Alcance" value={stand.range_stat} />
+                        <StandStat label="Persistência" value={stand.stamina} />
+                        <StandStat label="Precisão" value={stand.precision} />
+                        <StandStat label="Potencial" value={stand.development_potential} />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-xs text-muted">Selado.</p>
+                  )}
+                </div>
+              ))}
             </div>
           ) : (
-            <form onSubmit={handleCreateStand} className="card">
+            <p className="text-sm text-muted">Nenhum Stand definido ainda.</p>
+          )}
+          {pendingStandIdeas.length > 0 && (
+            <div className="text-sm text-muted mt-2">
+              Ideias pendentes: <strong>{pendingStandIdeas.map(idea => idea.name).join(', ')}</strong>
+            </div>
+          )}
+          {canCreateStand ? (
+            <form onSubmit={handleCreateStand} className="card mt-3">
               <div className="form-group">
                 <label className="label">Nome do Stand</label>
                 <input
@@ -307,6 +327,10 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
                 </p>
               )}
             </form>
+          ) : (
+            <p className="text-xs text-muted mt-2">
+              Limite de Stands atingido. Peça ao mestre para liberar outro.
+            </p>
           )}
         </div>
       )}
@@ -319,9 +343,9 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
               Técnica inata selada. Aguardando liberação do mestre.
             </p>
           )}
-          {character.cursed_techniques?.length > 0 && (
+          {cursedTechniques.length > 0 && (
             <div className="mt-3">
-              {character.cursed_techniques.map(tech => (
+              {cursedTechniques.map(tech => (
                 <div key={tech.id} className="technique-item">
                   <strong>Técnica Amaldiçoada {tech.name}</strong>
                   {!character.cursed_energy_unlocked && (
@@ -332,11 +356,12 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
             </div>
           )}
           <>
-            {pendingCursedIdea ? (
+            {pendingCursedIdeas.length > 0 && (
               <div className="text-sm text-muted mt-3">
-                Ideia enviada: <strong>{pendingCursedIdea.name}</strong> (aguardando aprovação).
+                Ideias pendentes: <strong>{pendingCursedIdeas.map(idea => idea.name).join(', ')}</strong>.
               </div>
-            ) : (
+            )}
+            {canCreateCursed ? (
               <form onSubmit={handleCreateTechnique} className="card mt-3">
                 <div className="form-group">
                   <label className="label">Nome da Técnica</label>
@@ -377,6 +402,10 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
                   </p>
                 )}
               </form>
+            ) : (
+              <p className="text-xs text-muted mt-2">
+                Limite de Técnicas Amaldiçoadas atingido. Peça ao mestre para liberar outra.
+              </p>
             )}
           </>
         </div>
@@ -391,78 +420,88 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
             </p>
           )}
           <>
-            {character.zanpakuto ? (
-              <>
-                <h4 className="section-title">⚔️ {character.zanpakuto.name}</h4>
-                {character.zanpakuto_unlocked ? (
-                  <>
-                    <p className="text-sm text-muted">{character.zanpakuto.sealed_form}</p>
-                    {character.zanpakuto.shikai_command && (
-                      <div className="zanpakuto-form">
-                        <strong>Shikai:</strong> "{character.zanpakuto.shikai_command}"
-                        <p className="text-sm">{character.zanpakuto.shikai_description}</p>
-                      </div>
+            {zanpakutos.length > 0 ? (
+              <div className="mt-2">
+                {zanpakutos.map((zanpakuto, index) => (
+                  <div key={zanpakuto.id || index} className="technique-item">
+                    <strong>⚔️ {zanpakuto.name}</strong>
+                    {character.zanpakuto_unlocked ? (
+                      <>
+                        <p className="text-sm text-muted">{zanpakuto.sealed_form}</p>
+                        {zanpakuto.shikai_command && (
+                          <div className="zanpakuto-form">
+                            <strong>Shikai:</strong> "{zanpakuto.shikai_command}"
+                            <p className="text-sm">{zanpakuto.shikai_description}</p>
+                          </div>
+                        )}
+                        {zanpakuto.bankai_name && (
+                          <div className="zanpakuto-form">
+                            <strong>Bankai:</strong> {zanpakuto.bankai_name}
+                            <p className="text-sm">{zanpakuto.bankai_description}</p>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted">A Zanpakutou esta selada.</p>
                     )}
-                    {character.zanpakuto.bankai_name && (
-                      <div className="zanpakuto-form">
-                        <strong>Bankai:</strong> {character.zanpakuto.bankai_name}
-                        <p className="text-sm">{character.zanpakuto.bankai_description}</p>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-xs text-muted">A Zanpakutou esta selada.</p>
-                )}
-              </>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <>
-                {pendingZanpakutoIdea ? (
-                  <p className="text-sm text-muted">
-                    Ideia enviada: <strong>{pendingZanpakutoIdea.name}</strong> (aguardando aprovação).
+              <p className="text-sm text-muted">Nenhuma Zanpakutou definida ainda.</p>
+            )}
+
+            {pendingZanpakutoIdeas.length > 0 && (
+              <p className="text-sm text-muted mt-2">
+                Ideias pendentes: <strong>{pendingZanpakutoIdeas.map(idea => idea.name).join(', ')}</strong>
+              </p>
+            )}
+
+            {canCreateZanpakuto ? (
+              <form onSubmit={handleCreateZanpakuto} className="card mt-3">
+                <div className="form-group">
+                  <label className="label">Nome da Zanpakutou</label>
+                  <input
+                    type="text"
+                    className="input"
+                    value={zanpakutoName}
+                    onChange={e => setZanpakutoName(e.target.value)}
+                    placeholder="Ex: Zangetsu"
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Descrição / Forma Selada</label>
+                  <textarea
+                    className="textarea input"
+                    value={zanpakutoDescription}
+                    onChange={e => setZanpakutoDescription(e.target.value)}
+                    placeholder="Descreva a Zanpakutou..."
+                    rows={3}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="label">Observações</label>
+                  <textarea
+                    className="textarea input"
+                    value={zanpakutoNotes}
+                    onChange={e => setZanpakutoNotes(e.target.value)}
+                    placeholder="Notas e ideias..."
+                    rows={3}
+                  />
+                </div>
+                <button className="btn btn-primary btn-sm" disabled={creatingZanpakuto}>
+                  {creatingZanpakuto ? 'Enviando...' : 'Enviar Ideia'}
+                </button>
+                {!character.zanpakuto_unlocked && (
+                  <p className="text-xs text-muted mt-2">
+                    A ideia pode ser enviada agora, mas ficará selada até o mestre liberar.
                   </p>
-                ) : (
-                  <form onSubmit={handleCreateZanpakuto} className="card">
-                    <div className="form-group">
-                      <label className="label">Nome da Zanpakutou</label>
-                      <input
-                        type="text"
-                        className="input"
-                        value={zanpakutoName}
-                        onChange={e => setZanpakutoName(e.target.value)}
-                        placeholder="Ex: Zangetsu"
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="label">Descrição / Forma Selada</label>
-                      <textarea
-                        className="textarea input"
-                        value={zanpakutoDescription}
-                        onChange={e => setZanpakutoDescription(e.target.value)}
-                        placeholder="Descreva a Zanpakutou..."
-                        rows={3}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label className="label">Observações</label>
-                      <textarea
-                        className="textarea input"
-                        value={zanpakutoNotes}
-                        onChange={e => setZanpakutoNotes(e.target.value)}
-                        placeholder="Notas e ideias..."
-                        rows={3}
-                      />
-                    </div>
-                    <button className="btn btn-primary btn-sm" disabled={creatingZanpakuto}>
-                      {creatingZanpakuto ? 'Enviando...' : 'Enviar Ideia'}
-                    </button>
-                    {!character.zanpakuto_unlocked && (
-                      <p className="text-xs text-muted mt-2">
-                        A ideia pode ser enviada agora, mas ficará selada até o mestre liberar.
-                      </p>
-                    )}
-                  </form>
                 )}
-              </>
+              </form>
+            ) : (
+              <p className="text-xs text-muted mt-2">
+                Limite de Zanpakutou atingido. Peça ao mestre para liberar outra.
+              </p>
             )}
 
             <div className="mt-3">

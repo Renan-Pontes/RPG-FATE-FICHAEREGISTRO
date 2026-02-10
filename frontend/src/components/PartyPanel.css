@@ -142,3 +142,46 @@
   text-align: center;
   padding: 0.5rem;
 }
+
+/* Ideias pendentes */
+.idea-item {
+  align-items: stretch;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.idea-item .idea-details {
+  flex: 1;
+  min-width: 0;
+}
+
+.idea-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.idea-stand-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.idea-stand-stats .input {
+  min-width: 52px;
+}
+
+.idea-zanpakuto {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+@media (max-width: 700px) {
+  .idea-item {
+    flex-direction: column;
+  }
+}
