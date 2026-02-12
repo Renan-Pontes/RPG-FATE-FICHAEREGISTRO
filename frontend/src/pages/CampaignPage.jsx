@@ -7,16 +7,18 @@ import CharacterSheet from '../components/CharacterSheet'
 import Inventory from '../components/Inventory'
 import NotesPanel from '../components/NotesPanel'
 import PartyPanel from '../components/PartyPanel'
-import ProjectionArea from '../components/ProjectionArea'
 import NotificationBell from '../components/NotificationBell'
 import CampaignMap from '../components/CampaignMap'
 import MessagesPanel from '../components/MessagesPanel'
 import './CampaignPage.css'
 
 const TABS = {
-  player: ['sheet', 'map', 'messages', 'skills', 'inventory', 'notes', 'trade'],
+  player: ['sheet', 'map', 'messages', 'skills', 'inventory', 'notes'],
   master: ['party', 'map', 'messages', 'npcs', 'items', 'projection'],
 }
+
+const MASTER_LEFT_TABS = ['party', 'npcs', 'items']
+const MASTER_RIGHT_TABS = ['map', 'projection', 'messages']
 
 export default function CampaignPage() {
   const { id } = useParams()
@@ -39,10 +41,13 @@ export default function CampaignPage() {
   const [sessions, setSessions] = useState([])
   const [rollRequests, setRollRequests] = useState([])
   const [activeRollRequest, setActiveRollRequest] = useState(null)
+  const [showProjectionPopup, setShowProjectionPopup] = useState(false)
+  const [lastProjectionSeen, setLastProjectionSeen] = useState(null)
   
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState(isGameMaster ? 'party' : 'sheet')
   const [showRoller, setShowRoller] = useState(false)
+  const [showMobileMenu, setShowMobileMenu] = useState(false)
 
   // Load campaign data
   const loadData = useCallback(async () => {
@@ -108,6 +113,21 @@ export default function CampaignPage() {
   useEffect(() => {
     loadData()
   }, [loadData])
+
+  const projectionImage = projection?.image || projection?.projection_image
+  const projectionTitle = projection?.title || projection?.projection_title
+  const projectionUpdatedAt = projection?.updated_at || projection?.projection_updated_at
+
+  useEffect(() => {
+    if (!projectionImage) {
+      setShowProjectionPopup(false)
+      return
+    }
+    if (!projectionUpdatedAt) return
+    if (projectionUpdatedAt !== lastProjectionSeen) {
+      setShowProjectionPopup(true)
+    }
+  }, [projectionImage, projectionUpdatedAt, lastProjectionSeen])
 
   // Polling every 3 seconds
   useEffect(() => {
@@ -187,6 +207,13 @@ export default function CampaignPage() {
     setShowRoller(false)
   }
 
+  const handleCloseProjection = () => {
+    setShowProjectionPopup(false)
+    if (projectionUpdatedAt) {
+      setLastProjectionSeen(projectionUpdatedAt)
+    }
+  }
+
   const tabs = isGameMaster ? TABS.master : TABS.player
 
   if (loading) {
@@ -219,19 +246,30 @@ export default function CampaignPage() {
           </div>
         </div>
         <div className="header-right">
-          <NotificationBell 
-            notifications={notifications} 
-            onClear={handleClearNotifications}
-          />
+          <button
+            className="btn btn-ghost mobile-menu-button"
+            onClick={() => setShowMobileMenu(true)}
+            aria-label="Abrir menu"
+          >
+            <span className="hamburger">
+              <span />
+              <span />
+              <span />
+            </span>
+          </button>
           {myCharacter && (
             <div className="fate-points-display">
               <span className="fate-label">Fate Points</span>
               <span className="fate-value">{myCharacter.fate_points}</span>
             </div>
           )}
+          <NotificationBell 
+            notifications={notifications} 
+            onClear={handleClearNotifications}
+          />
           {isGameMaster && (
             <button 
-              className="btn btn-primary"
+              className="btn btn-primary desktop-only"
               onClick={() => {
                 setActiveRollRequest(null)
                 setShowRoller(true)
@@ -244,166 +282,281 @@ export default function CampaignPage() {
       </header>
 
       {/* Main Content */}
-      <div className="campaign-content">
-        {/* Projection Area */}
-        <ProjectionArea 
-          projection={projection}
-          campaign={campaign}
-          isGameMaster={isGameMaster}
-          onUpdate={loadData}
-        />
+      <div className={`campaign-content ${isGameMaster ? 'master-layout' : 'player-layout'}`}>
+        {isGameMaster ? (
+          <>
+            <aside className="side-nav left">
+              <div className="nav-title">Gestão</div>
+              {MASTER_LEFT_TABS.map(tab => (
+                <button
+                  key={tab}
+                  className={`nav-button ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {getTabLabel(tab)}
+                </button>
+              ))}
+            </aside>
 
-        {/* Side Panel */}
-        <div className="side-panel">
-          {!isGameMaster && rollRequests.length > 0 && (
-            <div className="card mb-3">
-              <h4 className="text-sm mb-2">Solicitações de Rolagem</h4>
-              <div className="list">
-                {rollRequests.map(req => (
-                  <div key={req.id} className="list-item">
-                    <div>
-                      <strong>{req.character_name}</strong>
-                      <div className="text-xs text-muted">
-                        {req.skill_name ? `Skill: ${req.skill_name}` : 'Sem skill'}
+            <main className="master-main">
+              <div className="master-content">
+                <div className="tab-content">
+                  {activeTab === 'party' && isGameMaster && (
+                    <PartyPanel 
+                      party={party} 
+                      campaign={campaign}
+                      skills={skills}
+                      traits={traits}
+                      powerIdeas={powerIdeas}
+                      skillIdeas={skillIdeas}
+                      onUpdate={loadData}
+                    />
+                  )}
+                  {activeTab === 'npcs' && isGameMaster && (
+                    <NPCPanel 
+                      npcs={npcs} 
+                      campaign={campaign}
+                      onUpdate={loadData}
+                    />
+                  )}
+                  {activeTab === 'items' && isGameMaster && (
+                    <ItemsManagerPanel 
+                      items={items}
+                      party={[...party, ...npcs]}
+                      campaign={campaign}
+                      onUpdate={loadData}
+                    />
+                  )}
+                  {activeTab === 'projection' && isGameMaster && (
+                    <ProjectionPanel 
+                      campaign={campaign}
+                      onUpdate={loadData}
+                    />
+                  )}
+                  {activeTab === 'messages' && (
+                    <MessagesPanel
+                      campaign={campaign}
+                      party={party}
+                      messages={messages}
+                      onRefresh={loadData}
+                    />
+                  )}
+                  {activeTab === 'map' && (
+                    <CampaignMap
+                      campaign={campaign}
+                      mapData={campaignMap}
+                      sessions={sessions}
+                      party={party}
+                      isGameMaster={isGameMaster}
+                      onMapUpdate={setCampaignMap}
+                      onSessionsUpdate={setSessions}
+                    />
+                  )}
+                </div>
+              </div>
+            </main>
+
+            <aside className="side-nav right">
+              <div className="nav-title">Mesa</div>
+              {MASTER_RIGHT_TABS.map(tab => (
+                <button
+                  key={tab}
+                  className={`nav-button ${activeTab === tab ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {getTabLabel(tab)}
+                </button>
+              ))}
+            </aside>
+          </>
+        ) : (
+          <>
+            <div className="player-panel">
+              {!isGameMaster && rollRequests.length > 0 && (
+                <div className="card mb-3">
+                  <h4 className="text-sm mb-2">Solicitações de Rolagem</h4>
+                  <div className="list">
+                    {rollRequests.map(req => (
+                      <div key={req.id} className="list-item">
+                        <div>
+                          <strong>{req.character_name}</strong>
+                          <div className="text-xs text-muted">
+                            {req.skill_name ? `Skill: ${req.skill_name}` : 'Sem skill'}
+                          </div>
+                          {req.description && (
+                            <div className="text-xs text-muted">{req.description}</div>
+                          )}
+                        </div>
+                        <button
+                          className="btn btn-sm btn-primary"
+                          onClick={() => {
+                            setActiveRollRequest(req)
+                            setShowRoller(true)
+                          }}
+                        >
+                          Rolar
+                        </button>
                       </div>
-                      {req.description && (
-                        <div className="text-xs text-muted">{req.description}</div>
-                      )}
-                    </div>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      onClick={() => {
-                        setActiveRollRequest(req)
-                        setShowRoller(true)
-                      }}
-                    >
-                      Rolar
-                    </button>
+                    ))}
                   </div>
+                </div>
+              )}
+              <div className="tabs">
+                {tabs.map(tab => (
+                  <button
+                    key={tab}
+                    className={`tab ${activeTab === tab ? 'active' : ''}`}
+                    onClick={() => setActiveTab(tab)}
+                  >
+                    {getTabLabel(tab)}
+                  </button>
                 ))}
               </div>
+
+              <div className="tab-content">
+                {activeTab === 'sheet' && myCharacter && (
+                  <CharacterSheet 
+                    character={myCharacter} 
+                    campaign={campaign}
+                    isGameMaster={isGameMaster}
+                    powerIdeas={powerIdeas}
+                    onUpdate={loadData}
+                  />
+                )}
+                {activeTab === 'sheet' && !myCharacter && !isGameMaster && (
+                  <CreateCharacterPrompt 
+                    campaignId={id} 
+                    traits={traits}
+                    onCreated={loadData}
+                  />
+                )}
+                {activeTab === 'inventory' && myCharacter && (
+                  <Inventory 
+                    character={myCharacter}
+                    party={party}
+                    onUpdate={loadData}
+                  />
+                )}
+                {activeTab === 'notes' && myCharacter && (
+                  <NotesPanel character={myCharacter} />
+                )}
+                {activeTab === 'skills' && (
+                  <SkillsPanel
+                    campaignId={id}
+                    character={myCharacter}
+                    skills={myCharacter?.skills || []}
+                    skillIdeas={skillIdeas}
+                    onUpdate={loadData}
+                  />
+                )}
+                {activeTab === 'messages' && (
+                  <MessagesPanel
+                    campaign={campaign}
+                    party={party}
+                    messages={messages}
+                    onRefresh={loadData}
+                  />
+                )}
+                {activeTab === 'map' && (
+                  <CampaignMap
+                    campaign={campaign}
+                    mapData={campaignMap}
+                    sessions={sessions}
+                    party={party}
+                    isGameMaster={isGameMaster}
+                    onMapUpdate={setCampaignMap}
+                    onSessionsUpdate={setSessions}
+                  />
+                )}
+              </div>
             </div>
-          )}
-          <div className="tabs">
-            {tabs.map(tab => (
-              <button
-                key={tab}
-                className={`tab ${activeTab === tab ? 'active' : ''}`}
-                onClick={() => setActiveTab(tab)}
-              >
-                {getTabLabel(tab)}
+          </>
+        )}
+      </div>
+
+      {showProjectionPopup && projectionImage && (
+        <div className="projection-popup-backdrop" onClick={handleCloseProjection}>
+          <div className="projection-popup" onClick={e => e.stopPropagation()}>
+            <div className="projection-popup-header">
+              <div>
+                <div className="projection-popup-label">Projeção</div>
+                <strong>{projectionTitle || 'Sem título'}</strong>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={handleCloseProjection}>
+                Fechar
               </button>
-            ))}
+            </div>
+            <img
+              src={projectionImage}
+              alt={projectionTitle || 'Projeção'}
+              className="projection-popup-image"
+            />
           </div>
+        </div>
+      )}
 
-          <div className="tab-content">
-            {/* Player Tabs */}
-            {activeTab === 'sheet' && myCharacter && (
-              <CharacterSheet 
-                character={myCharacter} 
-                campaign={campaign}
-                isGameMaster={isGameMaster}
-                powerIdeas={powerIdeas}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'sheet' && !myCharacter && !isGameMaster && (
-              <CreateCharacterPrompt 
-                campaignId={id} 
-                traits={traits}
-                onCreated={loadData}
-              />
-            )}
-            {activeTab === 'inventory' && myCharacter && (
-              <Inventory 
-                character={myCharacter}
-                party={party}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'notes' && myCharacter && (
-              <NotesPanel character={myCharacter} />
-            )}
-            {activeTab === 'trade' && (
-              <TradePanel party={party} myCharacter={myCharacter} onUpdate={loadData} />
-            )}
-            {activeTab === 'skills' && (
-              <SkillsPanel
-                campaignId={id}
-                character={myCharacter}
-                skills={myCharacter?.skills || []}
-                skillIdeas={skillIdeas}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'messages' && (
-              <MessagesPanel
-                campaign={campaign}
-                party={party}
-                messages={messages}
-                onRefresh={loadData}
-              />
-            )}
-            {activeTab === 'map' && (
-              <CampaignMap
-                campaign={campaign}
-                mapData={campaignMap}
-                sessions={sessions}
-                party={party}
-                isGameMaster={isGameMaster}
-                onMapUpdate={setCampaignMap}
-                onSessionsUpdate={setSessions}
-              />
-            )}
-
-            {/* Master Tabs */}
-            {activeTab === 'party' && isGameMaster && (
-              <PartyPanel 
-                party={party} 
-                campaign={campaign}
-                skills={skills}
-                traits={traits}
-                powerIdeas={powerIdeas}
-                skillIdeas={skillIdeas}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'npcs' && isGameMaster && (
-              <NPCPanel 
-                npcs={npcs} 
-                campaign={campaign}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'items' && isGameMaster && (
-              <ItemsManagerPanel 
-                items={items}
-                party={[...party, ...npcs]}
-                campaign={campaign}
-                onUpdate={loadData}
-              />
-            )}
-            {activeTab === 'projection' && isGameMaster && (
-              <ProjectionPanel 
-                campaign={campaign}
-                onUpdate={loadData}
-              />
+      {showMobileMenu && (
+        <div className="mobile-menu-backdrop" onClick={() => setShowMobileMenu(false)}>
+          <div className="mobile-menu" onClick={e => e.stopPropagation()}>
+            <div className="mobile-menu-header">
+              <strong>Menu</strong>
+              <button className="btn btn-ghost btn-sm" onClick={() => setShowMobileMenu(false)}>
+                Fechar
+              </button>
+            </div>
+            {isGameMaster ? (
+              <>
+                <div className="mobile-menu-section">
+                  <div className="mobile-menu-title">Gestão</div>
+                  {MASTER_LEFT_TABS.map(tab => (
+                    <button
+                      key={tab}
+                      className={`mobile-menu-button ${activeTab === tab ? 'active' : ''}`}
+                      onClick={() => {
+                        setActiveTab(tab)
+                        setShowMobileMenu(false)
+                      }}
+                    >
+                      {getTabLabel(tab)}
+                    </button>
+                  ))}
+                </div>
+                <div className="mobile-menu-section">
+                  <div className="mobile-menu-title">Mesa</div>
+                  {MASTER_RIGHT_TABS.map(tab => (
+                    <button
+                      key={tab}
+                      className={`mobile-menu-button ${activeTab === tab ? 'active' : ''}`}
+                      onClick={() => {
+                        setActiveTab(tab)
+                        setShowMobileMenu(false)
+                      }}
+                    >
+                      {getTabLabel(tab)}
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="mobile-menu-section">
+                <div className="mobile-menu-title">Navegação</div>
+                {tabs.map(tab => (
+                  <button
+                    key={tab}
+                    className={`mobile-menu-button ${activeTab === tab ? 'active' : ''}`}
+                    onClick={() => {
+                      setActiveTab(tab)
+                      setShowMobileMenu(false)
+                    }}
+                  >
+                    {getTabLabel(tab)}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </div>
-      </div>
-
-      <div className="mobile-tabs">
-        {tabs.map(tab => (
-          <button
-            key={tab}
-            className={`mobile-tab ${activeTab === tab ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab)}
-          >
-            {getTabLabel(tab)}
-          </button>
-        ))}
-      </div>
+      )}
 
       {/* Dice Roller Modal */}
       {showRoller && (
@@ -432,7 +585,6 @@ function getTabLabel(tab) {
     skills: '🧠 Skills',
     inventory: '🎒 Inventário',
     notes: '📝 Notas',
-    trade: '🔄 Trocas',
     party: '👥 Party',
     npcs: '🎭 NPCs',
     items: '📦 Itens',
@@ -549,60 +701,6 @@ function CreateCharacterPrompt({ campaignId, traits = [], onCreated }) {
           {creating ? 'Criando...' : 'Criar Personagem'}
         </button>
       </form>
-    </div>
-  )
-}
-
-function TradePanel({ party, myCharacter, onUpdate }) {
-  if (!myCharacter) {
-    return <div className="text-muted">Crie um personagem primeiro.</div>
-  }
-
-  const myItems = myCharacter.items || []
-  const otherCharacters = party.filter(c => c.id !== myCharacter.id)
-
-  const handleTransfer = async (itemId, toCharacterId) => {
-    try {
-      await api.transferItem(itemId, toCharacterId)
-      onUpdate()
-    } catch (err) {
-      alert(err.message)
-    }
-  }
-
-  return (
-    <div className="trade-panel">
-      <h3>Transferir Itens</h3>
-      
-      {myItems.length === 0 ? (
-        <p className="text-muted text-sm">Você não tem itens para transferir.</p>
-      ) : (
-        <div className="list">
-          {myItems.map(item => (
-            <div key={item.id} className="list-item">
-              <div>
-                <strong>{item.name}</strong>
-                <div className="text-xs text-muted">Qtd: {item.quantity}</div>
-              </div>
-              <select 
-                className="input"
-                style={{ width: 'auto' }}
-                onChange={e => {
-                  if (e.target.value) {
-                    handleTransfer(item.id, parseInt(e.target.value))
-                    e.target.value = ''
-                  }
-                }}
-              >
-                <option value="">Transferir para...</option>
-                {otherCharacters.map(c => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

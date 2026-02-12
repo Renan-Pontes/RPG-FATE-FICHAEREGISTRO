@@ -20,6 +20,7 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
   const [zanpakutoDescription, setZanpakutoDescription] = useState('')
   const [zanpakutoNotes, setZanpakutoNotes] = useState('')
   const [creatingZanpakuto, setCreatingZanpakuto] = useState(false)
+  const [choosingKidou, setChoosingKidou] = useState(null)
 
   useEffect(() => {
     setStandName('')
@@ -35,6 +36,7 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
     setZanpakutoDescription('')
     setZanpakutoNotes('')
     setCreatingZanpakuto(false)
+    setChoosingKidou(null)
   }, [character?.id])
 
   const pendingIdeas = powerIdeas.filter(
@@ -47,6 +49,8 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
   const stands = character.stands || []
   const zanpakutos = character.zanpakutos || []
   const cursedTechniques = character.cursed_techniques || []
+  const bleachSpells = character.bleach_spells || []
+  const bleachOffers = character.bleach_spell_offers || []
 
   const standSlots = 1 + (character.extra_stand_slots || 0)
   const zanpakutoSlots = 1 + (character.extra_zanpakuto_slots || 0)
@@ -130,15 +134,15 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
     }
   }
 
-  const handleToggleRelease = async (nextShikai, nextBankai) => {
+  const handleChooseBleachSpell = async (offerId, spellId) => {
+    setChoosingKidou(`${offerId}:${spellId}`)
     try {
-      await api.setRelease(character.id, {
-        shikai_active: nextShikai,
-        bankai_active: nextBankai,
-      })
+      await api.bleachChooseSpell(character.id, offerId, spellId)
       onUpdate?.()
     } catch (err) {
       alert(err.message)
+    } finally {
+      setChoosingKidou(null)
     }
   }
 
@@ -430,14 +434,52 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
                         <p className="text-sm text-muted">{zanpakuto.sealed_form}</p>
                         {zanpakuto.shikai_command && (
                           <div className="zanpakuto-form">
-                            <strong>Shikai:</strong> "{zanpakuto.shikai_command}"
-                            <p className="text-sm">{zanpakuto.shikai_description}</p>
+                            <strong>Shikai:</strong> "{character.shikai_unlocked ? zanpakuto.shikai_command : '????????'}"
+                            {character.shikai_unlocked && zanpakuto.shikai_description && (
+                              <p className="text-sm">{zanpakuto.shikai_description}</p>
+                            )}
+                            {character.shikai_unlocked && zanpakuto.shikai_abilities?.length > 0 && (
+                              <div className="zanpakuto-abilities">
+                                <div className="text-xs text-muted mb-1">Habilidades do Shikai</div>
+                                <div className="abilities-list">
+                                  {zanpakuto.shikai_abilities.map(ability => (
+                                    <div key={ability.id} className="ability-item">
+                                      <span className="ability-name">{ability.name}</span>
+                                      {ability.description && (
+                                        <span className="ability-description text-muted text-xs">
+                                          {ability.description}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                         {zanpakuto.bankai_name && (
                           <div className="zanpakuto-form">
-                            <strong>Bankai:</strong> {zanpakuto.bankai_name}
-                            <p className="text-sm">{zanpakuto.bankai_description}</p>
+                            <strong>Bankai:</strong> {character.bankai_unlocked ? zanpakuto.bankai_name : '????????'}
+                            {character.bankai_unlocked && zanpakuto.bankai_description && (
+                              <p className="text-sm">{zanpakuto.bankai_description}</p>
+                            )}
+                            {character.bankai_unlocked && zanpakuto.bankai_abilities?.length > 0 && (
+                              <div className="zanpakuto-abilities">
+                                <div className="text-xs text-muted mb-1">Habilidades do Bankai</div>
+                                <div className="abilities-list">
+                                  {zanpakuto.bankai_abilities.map(ability => (
+                                    <div key={ability.id} className="ability-item">
+                                      <span className="ability-name">{ability.name}</span>
+                                      {ability.description && (
+                                        <span className="ability-description text-muted text-xs">
+                                          {ability.description}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </div>
                         )}
                       </>
@@ -504,30 +546,79 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
               </p>
             )}
 
-            <div className="mt-3">
-              <div className="flex gap-2">
-                <button
-                  className="btn btn-sm btn-secondary"
-                  disabled={!character.shikai_unlocked}
-                  onClick={() => handleToggleRelease(!character.shikai_active, character.bankai_active)}
-                >
-                  {character.shikai_active ? 'Desativar Shikai' : 'Ativar Shikai'}
-                </button>
-                <button
-                  className="btn btn-sm btn-secondary"
-                  disabled={!character.bankai_unlocked}
-                  onClick={() => handleToggleRelease(true, !character.bankai_active)}
-                >
-                  {character.bankai_active ? 'Desativar Bankai' : 'Ativar Bankai'}
-                </button>
-              </div>
-              <div className="text-xs text-muted mt-2">
-                {character.shikai_unlocked ? 'Shikai liberada' : 'Shikai não liberada'}
-                {' • '}
-                {character.bankai_unlocked ? 'Bankai liberada' : 'Bankai não liberada'}
-              </div>
+            <div className="mt-3 text-xs text-muted">
+              {character.shikai_unlocked ? 'Shikai liberada' : 'Shikai não liberada'}
+              {' • '}
+              {character.bankai_unlocked ? 'Bankai liberada' : 'Bankai não liberada'}
             </div>
           </>
+        </div>
+      )}
+
+      {campaign?.campaign_type === 'bleach' && (
+        <div className="sheet-section special-power">
+          <h4 className="section-title">✨ Kidou (Hadou e Bakudou)</h4>
+          <div className="kidou-meta">
+            <span className="badge">Tier liberado: {character.bleach_kidou_tier || 0}</span>
+            {bleachOffers.length === 0 && (
+              <span className="text-xs text-muted">Aguardando o mestre liberar novos kidou.</span>
+            )}
+          </div>
+
+          {bleachOffers.length > 0 && (
+            <div className="kidou-offers mt-3">
+              {bleachOffers.map(offer => (
+                <div key={offer.id} className="card kidou-offer">
+                  <div className="kidou-offer-header">
+                    <strong>Oferta Tier {offer.tier}</strong>
+                    <span className="text-xs text-muted">Escolha 1</span>
+                  </div>
+                  <div className="kidou-options">
+                    {offer.options.map(option => (
+                      <button
+                        key={option.id}
+                        type="button"
+                        className="kidou-option"
+                        onClick={() => handleChooseBleachSpell(offer.id, option.id)}
+                        disabled={choosingKidou === `${offer.id}:${option.id}`}
+                      >
+                        <div className="kidou-option-title">{option.name}</div>
+                        <div className="text-xs text-muted">
+                          {option.spell_type} {option.number || ''} • Tier {option.tier} • PA {option.pa_cost}
+                        </div>
+                        {option.effect && (
+                          <div className="text-xs text-muted kidou-option-effect">
+                            {option.effect}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {bleachSpells.length > 0 ? (
+            <div className="kidou-list mt-3">
+              <h4 className="text-sm mb-2">Kidou aprendidos</h4>
+              <div className="list">
+                {bleachSpells.map(link => (
+                  <div key={link.id} className="list-item">
+                    <div>
+                      <strong>{link.spell?.name}</strong>
+                      <div className="text-xs text-muted">
+                        {link.spell?.spell_type} {link.spell?.number || ''} • Tier {link.spell?.tier} • PA {link.spell?.pa_cost}
+                      </div>
+                    </div>
+                    <span className="badge">Maestria {link.mastery}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-muted mt-2">Nenhum Kidou aprendido ainda.</p>
+          )}
         </div>
       )}
     </div>

@@ -129,7 +129,12 @@ export async function banPlayerFromCampaign(campaignId, userId, reason = '') {
 }
 
 export async function getProjection(campaignId) {
-  return request(`/campaigns/${campaignId}/projection/`)
+  const data = await request(`/campaigns/${campaignId}/projection/`)
+  return {
+    image: data.projection_image || null,
+    title: data.projection_title || '',
+    updated_at: data.projection_updated_at || null,
+  }
 }
 
 export async function updateProjection(campaignId, formData) {
@@ -213,6 +218,20 @@ export async function getCharacters(campaignId) {
 
 export async function getCharacter(id) {
   return request(`/characters/${id}/`)
+}
+
+export async function bleachLevelUp(characterId, tier) {
+  return request(`/characters/${characterId}/bleach_level_up/`, {
+    method: 'POST',
+    body: JSON.stringify({ tier }),
+  })
+}
+
+export async function bleachChooseSpell(characterId, offerId, spellId) {
+  return request(`/characters/${characterId}/bleach_choose_spell/`, {
+    method: 'POST',
+    body: JSON.stringify({ offer_id: offerId, spell_id: spellId }),
+  })
 }
 
 export async function createCharacter(data) {

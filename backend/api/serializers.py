@@ -4,6 +4,7 @@ from rest_framework import serializers
 from .models import (
     Profile, Campaign, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
+    BleachSpell, CharacterBleachSpell, BleachSpellOffer,
     Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session, Message
 )
@@ -134,6 +135,34 @@ class PersonalityTraitPublicSerializer(serializers.ModelSerializer):
         model = PersonalityTrait
         fields = ('id', 'name', 'description', 'campaign')
         read_only_fields = ('id',)
+
+
+# ============== BLEACH SPELLS ==============
+
+class BleachSpellSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BleachSpell
+        fields = ('id', 'name', 'number', 'spell_type', 'tier', 'pa_cost', 'effect', 'incantation')
+        read_only_fields = ('id',)
+
+
+class CharacterBleachSpellSerializer(serializers.ModelSerializer):
+    spell = BleachSpellSerializer(read_only=True)
+
+    class Meta:
+        model = CharacterBleachSpell
+        fields = ('id', 'spell', 'mastery', 'acquired_at')
+        read_only_fields = fields
+
+
+class BleachSpellOfferSerializer(serializers.ModelSerializer):
+    options = BleachSpellSerializer(many=True, read_only=True)
+    chosen_spell = BleachSpellSerializer(read_only=True)
+
+    class Meta:
+        model = BleachSpellOffer
+        fields = ('id', 'tier', 'is_open', 'created_at', 'options', 'chosen_spell', 'chosen_at')
+        read_only_fields = fields
 
 
 # ============== SKILL IDEAS ==============
@@ -310,6 +339,8 @@ class CharacterPublicSerializer(serializers.ModelSerializer):
     items = ItemSerializer(many=True, read_only=True)
     notes = CharacterNoteSerializer(many=True, read_only=True)
     owner_username = serializers.CharField(source='owner.username', read_only=True)
+    bleach_spells = CharacterBleachSpellSerializer(source='bleach_spell_links', many=True, read_only=True)
+    bleach_spell_offers = serializers.SerializerMethodField()
 
     # Poderes especiais (dependendo do tipo de campanha)
     stands = StandSerializer(many=True, read_only=True)
@@ -326,11 +357,16 @@ class CharacterPublicSerializer(serializers.ModelSerializer):
             'zanpakuto_unlocked', 'extra_zanpakuto_slots',
             'shikai_unlocked', 'bankai_unlocked',
             'shikai_active', 'bankai_active',
+            'bleach_kidou_tier', 'bleach_spells', 'bleach_spell_offers',
             'skills', 'abilities', 'advantages', 'personality_traits',
             'items', 'notes', 'stands', 'cursed_techniques', 'zanpakutos',
             'owner', 'owner_username', 'campaign',
         )
         read_only_fields = fields  # Jogador não edita direto
+
+    def get_bleach_spell_offers(self, obj):
+        offers = obj.bleach_spell_offers.filter(is_open=True).prefetch_related('options')
+        return BleachSpellOfferSerializer(offers, many=True).data
 
 
 class CharacterMasterSerializer(serializers.ModelSerializer):
@@ -342,6 +378,8 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
     items = ItemSerializer(many=True, read_only=True)
     notes = CharacterNoteSerializer(many=True, read_only=True)
     owner_username = serializers.CharField(source='owner.username', read_only=True)
+    bleach_spells = CharacterBleachSpellSerializer(source='bleach_spell_links', many=True, read_only=True)
+    bleach_spell_offers = BleachSpellOfferSerializer(many=True, read_only=True)
 
     # Poderes especiais
     stands = StandSerializer(many=True, read_only=True)
@@ -372,6 +410,7 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
             'zanpakuto_unlocked', 'extra_zanpakuto_slots',
             'shikai_unlocked', 'bankai_unlocked',
             'shikai_active', 'bankai_active',
+            'bleach_kidou_tier', 'bleach_spells', 'bleach_spell_offers',
             # Stats ocultos
             'forca', 'destreza', 'vigor', 'inteligencia', 'sabedoria', 'carisma',
             # Relações
@@ -380,7 +419,7 @@ class CharacterMasterSerializer(serializers.ModelSerializer):
             'items', 'notes', 'stands', 'cursed_techniques', 'zanpakutos',
             'owner', 'owner_username', 'campaign',
         )
-        read_only_fields = ('id', 'created_at', 'owner_username')
+        read_only_fields = ('id', 'created_at', 'owner_username', 'bleach_kidou_tier')
 
     def validate(self, attrs):
         traits = attrs.get('personality_traits')

@@ -251,3 +251,63 @@
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
 }
+
+.zanpakuto-abilities {
+  margin-top: 0.5rem;
+}
+
+.kidou-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.kidou-offer {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+}
+
+.kidou-offer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.kidou-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.5rem;
+}
+
+.kidou-option {
+  text-align: left;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.kidou-option:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+
+.kidou-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.kidou-option-title {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.kidou-option-effect {
+  margin-top: 0.35rem;
+  color: var(--text-secondary);
+}

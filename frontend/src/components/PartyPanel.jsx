@@ -33,6 +33,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
   const [requestingRoll, setRequestingRoll] = useState(false)
   const [ideaResponses, setIdeaResponses] = useState({})
   const [skillIdeaResponses, setSkillIdeaResponses] = useState({})
+  const [kidouTier, setKidouTier] = useState(1)
+  const [kidouOffering, setKidouOffering] = useState(false)
+  const [kidouChoosing, setKidouChoosing] = useState(null)
 
   const openCharacter = (char) => {
     setSelectedCharacter(char)
@@ -63,6 +66,9 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
       description: '',
       notes: '',
     })
+    const nextTier = Math.min(5, Math.max(1, (char.bleach_kidou_tier || 0) + 1))
+    setKidouTier(nextTier)
+    setKidouChoosing(null)
   }
 
   const handleSaveStats = async () => {
@@ -200,6 +206,40 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
     }
   }
 
+  const handleBleachLevelUp = async () => {
+    if (!selectedCharacter) return
+    setKidouOffering(true)
+    try {
+      const offer = await api.bleachLevelUp(selectedCharacter.id, kidouTier)
+      const existingOffers = selectedCharacter.bleach_spell_offers || []
+      setSelectedCharacter({
+        ...selectedCharacter,
+        bleach_kidou_tier: Math.max(selectedCharacter.bleach_kidou_tier || 0, kidouTier),
+        bleach_spell_offers: [offer, ...existingOffers.filter(o => o.id !== offer.id)],
+      })
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setKidouOffering(false)
+    }
+  }
+
+  const handleBleachChooseSpell = async (offerId, spellId) => {
+    if (!selectedCharacter) return
+    setKidouChoosing(`${offerId}:${spellId}`)
+    try {
+      const updated = await api.bleachChooseSpell(selectedCharacter.id, offerId, spellId)
+      setSelectedCharacter(updated)
+      setSelectedSkillIds((updated.skills || []).map(s => s.id))
+      onUpdate?.()
+    } catch (err) {
+      alert(err.message)
+    } finally {
+      setKidouChoosing(null)
+    }
+  }
+
   const pendingIdeas = powerIdeas.filter(idea => idea.status === 'pending')
 
   const getTraitBonus = (char, statKey) => {
@@ -288,6 +328,10 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
   }
 
   const pendingSkillIdeas = (skillIdeas || []).filter(idea => idea.status === 'pending')
+  const bleachSpells = selectedCharacter?.bleach_spells || []
+  const bleachOffers = selectedCharacter?.bleach_spell_offers || []
+  const openBleachOffers = bleachOffers.filter(offer => offer.is_open)
+  const closedBleachOffers = bleachOffers.filter(offer => !offer.is_open)
 
   const getSkillIdeaValue = (ideaId, field, fallback = '') => {
     if (skillIdeaResponses[ideaId] && skillIdeaResponses[ideaId][field] !== undefined) {
@@ -521,7 +565,7 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
       {/* Modal de edição */}
       {selectedCharacter && (
         <div className="modal-backdrop" onClick={() => setSelectedCharacter(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal character-modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h3 className="modal-title">Editar {selectedCharacter.name}</h3>
               <button 
@@ -531,312 +575,427 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
                 ✕
               </button>
             </div>
-            <div className="modal-body">
-              <div className="stats-editor">
-                {STATS.map(stat => (
-                  <div key={stat.key} className="stat-editor-row">
-                    <label>{stat.label}</label>
-                    <input
-                      type="number"
-                      className="input"
-                      value={editStats[stat.key]}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        [stat.key]: parseInt(e.target.value) || 0
-                      }))}
-                    />
+            <div className="modal-body character-modal-body">
+              <div className="character-modal-grid">
+                <section className="character-modal-section">
+                  <h4 className="section-title">Atributos</h4>
+                  <div className="stats-editor compact">
+                    {STATS.map(stat => (
+                      <div key={stat.key} className="stat-editor-row">
+                        <label>{stat.label}</label>
+                        <input
+                          type="number"
+                          className="input"
+                          value={editStats[stat.key]}
+                          onChange={e => setEditStats(prev => ({
+                            ...prev,
+                            [stat.key]: parseInt(e.target.value) || 0
+                          }))}
+                        />
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-              
-              <div className="form-group mt-4">
-                <label className="label">Fate Points</label>
-                <input
-                  type="number"
-                  className="input"
-                  value={editStats.fate_points}
-                  onChange={e => setEditStats(prev => ({
-                    ...prev,
-                    fate_points: parseInt(e.target.value) || 0
-                  }))}
-                />
-              </div>
-              
-              <div className="form-group">
-                <label className="label">Status</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="Ex: Vivo, Ferido, Morto..."
-                  value={editStats.status}
-                  onChange={e => setEditStats(prev => ({
-                    ...prev,
-                    status: e.target.value
-                  }))}
-                />
-              </div>
 
-              {skills?.length > 0 && (
-                <div className="form-group mt-4">
-                  <label className="label">Perícias</label>
-                  <div className="list">
-                    {skills.map(skill => {
-                      const checked = selectedSkillIds.includes(skill.id)
-                      return (
-                        <label key={skill.id} className="list-item">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setSelectedSkillIds(prev => [...prev, skill.id])
-                              } else {
-                                setSelectedSkillIds(prev => prev.filter(id => id !== skill.id))
-                              }
-                            }}
-                          />
-                          <span className="ml-2">{skill.name}</span>
-                        </label>
-                      )
-                    })}
+                  <div className="character-modal-row mt-3">
+                    <div className="form-group">
+                      <label className="label">Fate Points</label>
+                      <input
+                        type="number"
+                        className="input"
+                        value={editStats.fate_points}
+                        onChange={e => setEditStats(prev => ({
+                          ...prev,
+                          fate_points: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="label">Status</label>
+                      <input
+                        type="text"
+                        className="input"
+                        placeholder="Ex: Vivo, Ferido, Morto..."
+                        value={editStats.status}
+                        onChange={e => setEditStats(prev => ({
+                          ...prev,
+                          status: e.target.value
+                        }))}
+                      />
+                    </div>
                   </div>
-                </div>
-              )}
+                </section>
 
-              {traits.length > 0 && (
-                <div className="form-group mt-4">
-                  <label className="label">Traços de Personalidade (min 5, max 10)</label>
-                  <div className="list">
-                    {traits.map(trait => {
-                      const checked = selectedTraitIds.includes(trait.id)
-                      const disabled = !checked && selectedTraitIds.length >= 10
-                      return (
-                        <label key={trait.id} className="list-item">
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            disabled={disabled}
-                            onChange={e => {
-                              if (e.target.checked) {
-                                setSelectedTraitIds(prev => [...prev, trait.id])
-                              } else {
-                                setSelectedTraitIds(prev => prev.filter(id => id !== trait.id))
-                              }
-                            }}
-                          />
-                          <span className="ml-2">
-                      {trait.name}
-                    </span>
-                  </label>
-                )
-              })}
-            </div>
-          </div>
-              )}
-
-              {campaign?.campaign_type === 'jojo' && (
-                <div className="form-group mt-4">
-                  <label className="label">Stand</label>
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={editStats.stand_unlocked}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        stand_unlocked: e.target.checked
-                      }))}
-                    />
-                    <span>Stand liberado</span>
-                  </label>
-                  <div className="form-group mt-2">
-                    <label className="label">Slots extras de Stand</label>
-                    <input
-                      type="number"
-                      className="input"
-                      min="0"
-                      value={editStats.extra_stand_slots}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        extra_stand_slots: parseInt(e.target.value) || 0
-                      }))}
-                    />
-                    <p className="text-xs text-muted mt-1">
-                      1 permite um segundo Stand.
-                    </p>
-                  </div>
-                  {selectedCharacter?.stands?.length > 0 && (
-                    <p className="text-xs text-muted mt-2">
-                      Stands definidos: {selectedCharacter.stands.map(s => s.name).join(', ')}
-                    </p>
-                  )}
-                  {editStats.stand_unlocked ? (
-                    <>
-                      {((selectedCharacter?.stands?.length || 0) < (1 + (editStats.extra_stand_slots || 0))) ? (
-                        <form onSubmit={handleCreateStand} className="card mt-2">
-                          <input
-                            type="text"
-                            className="input"
-                            placeholder="Nome do Stand"
-                            value={standForm.name}
-                            onChange={e => setStandForm(prev => ({ ...prev, name: e.target.value }))}
-                          />
-                          <input
-                            type="text"
-                            className="input mt-2"
-                            placeholder="Tipo / Classe"
-                            value={standForm.stand_type}
-                            onChange={e => setStandForm(prev => ({ ...prev, stand_type: e.target.value }))}
-                          />
-                          <textarea
-                            className="textarea input mt-2"
-                            placeholder="Descrição / ideia"
-                            value={standForm.description}
-                            onChange={e => setStandForm(prev => ({ ...prev, description: e.target.value }))}
-                            rows={3}
-                          />
-                          <textarea
-                            className="textarea input mt-2"
-                            placeholder="Poderes / observações"
-                            value={standForm.notes}
-                            onChange={e => setStandForm(prev => ({ ...prev, notes: e.target.value }))}
-                            rows={3}
-                          />
-                          <button className="btn btn-sm btn-primary mt-2" disabled={creatingStand}>
-                            {creatingStand ? 'Criando...' : 'Criar Stand'}
-                          </button>
-                        </form>
-                      ) : (
-                        <p className="text-xs text-muted mt-2">
-                          Limite de Stands atingido.
-                        </p>
-                      )}
-                    </>
+                <section className="character-modal-section">
+                  <h4 className="section-title">Skills & Traços</h4>
+                  {skills?.length > 0 ? (
+                    <div className="form-group">
+                      <label className="label">Perícias</label>
+                      <div className="list compact-list scroll-box">
+                        {skills.map(skill => {
+                          const checked = selectedSkillIds.includes(skill.id)
+                          return (
+                            <label key={skill.id} className="list-item">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedSkillIds(prev => [...prev, skill.id])
+                                  } else {
+                                    setSelectedSkillIds(prev => prev.filter(id => id !== skill.id))
+                                  }
+                                }}
+                              />
+                              <span className="ml-2">{skill.name}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
                   ) : (
-                    <p className="text-xs text-muted mt-2">
-                      Libere o Stand para definir.
-                    </p>
+                    <p className="text-xs text-muted">Nenhuma perícia disponível.</p>
                   )}
-                </div>
-              )}
 
-              {campaign?.campaign_type === 'jjk' && (
-                <div className="form-group mt-4">
-                  <label className="label">Tecnica Inata</label>
-                  <label className="flex items-center gap-2 mb-2">
-                    <input
-                      type="checkbox"
-                      checked={editStats.cursed_energy_unlocked}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        cursed_energy_unlocked: e.target.checked
-                      }))}
-                    />
-                    <span>Tecnica liberada</span>
-                  </label>
-                  <div className="form-group mt-2">
-                    <label className="label">Slots extras de Técnica</label>
-                    <input
-                      type="number"
-                      className="input"
-                      min="0"
-                      value={editStats.extra_cursed_technique_slots}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        extra_cursed_technique_slots: parseInt(e.target.value) || 0
-                      }))}
-                    />
-                    <p className="text-xs text-muted mt-1">
-                      1 permite uma segunda técnica.
-                    </p>
-                  </div>
-                </div>
-              )}
+                  {traits.length > 0 && (
+                    <div className="form-group mt-3">
+                      <label className="label">Traços (min 5, max 10)</label>
+                      <div className="list compact-list scroll-box">
+                        {traits.map(trait => {
+                          const checked = selectedTraitIds.includes(trait.id)
+                          const disabled = !checked && selectedTraitIds.length >= 10
+                          return (
+                            <label key={trait.id} className="list-item">
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                disabled={disabled}
+                                onChange={e => {
+                                  if (e.target.checked) {
+                                    setSelectedTraitIds(prev => [...prev, trait.id])
+                                  } else {
+                                    setSelectedTraitIds(prev => prev.filter(id => id !== trait.id))
+                                  }
+                                }}
+                              />
+                              <span className="ml-2">{trait.name}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </section>
 
-              {campaign?.campaign_type === 'bleach' && (
-                <div className="form-group mt-4">
-                  <label className="label">Zanpakutou</label>
-                  <div className="flex flex-col gap-2">
+                {campaign?.campaign_type === 'jojo' && (
+                  <section className="character-modal-section full">
+                    <label className="label">Stand</label>
                     <label className="flex items-center gap-2">
                       <input
                         type="checkbox"
-                        checked={editStats.zanpakuto_unlocked}
+                        checked={editStats.stand_unlocked}
                         onChange={e => setEditStats(prev => ({
                           ...prev,
-                          zanpakuto_unlocked: e.target.checked,
-                          shikai_unlocked: e.target.checked ? prev.shikai_unlocked : false,
-                          bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
+                          stand_unlocked: e.target.checked
                         }))}
                       />
-                      <span>Zanpakutou liberada</span>
+                      <span>Stand liberado</span>
                     </label>
-                    <label className="flex items-center gap-2">
+                    <div className="form-group mt-2">
+                      <label className="label">Slots extras de Stand</label>
                       <input
-                        type="checkbox"
-                        checked={editStats.shikai_unlocked}
+                        type="number"
+                        className="input"
+                        min="0"
+                        value={editStats.extra_stand_slots}
                         onChange={e => setEditStats(prev => ({
                           ...prev,
-                          zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
-                          shikai_unlocked: e.target.checked,
-                          bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
+                          extra_stand_slots: parseInt(e.target.value) || 0
                         }))}
                       />
-                      <span>Shikai liberada</span>
-                    </label>
-                    <label className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={editStats.bankai_unlocked}
-                        onChange={e => setEditStats(prev => ({
-                          ...prev,
-                          zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
-                          shikai_unlocked: e.target.checked ? true : prev.shikai_unlocked,
-                          bankai_unlocked: e.target.checked,
-                        }))}
-                      />
-                      <span>Bankai liberada</span>
-                    </label>
-                  </div>
-                  <div className="form-group mt-2">
-                    <label className="label">Slots extras de Zanpakutou</label>
-                    <input
-                      type="number"
-                      className="input"
-                      min="0"
-                      value={editStats.extra_zanpakuto_slots}
-                      onChange={e => setEditStats(prev => ({
-                        ...prev,
-                        extra_zanpakuto_slots: parseInt(e.target.value) || 0
-                      }))}
-                    />
-                    <p className="text-xs text-muted mt-1">
-                      1 permite uma segunda Zanpakutou.
-                    </p>
-                  </div>
-                </div>
-              )}
-              
-              <div className="mt-4">
-                <NotesPanel character={selectedCharacter} isGameMaster />
-              </div>
+                      <p className="text-xs text-muted mt-1">
+                        1 permite um segundo Stand.
+                      </p>
+                    </div>
+                    {selectedCharacter?.stands?.length > 0 && (
+                      <p className="text-xs text-muted mt-2">
+                        Stands definidos: {selectedCharacter.stands.map(s => s.name).join(', ')}
+                      </p>
+                    )}
+                    {editStats.stand_unlocked ? (
+                      <>
+                        {((selectedCharacter?.stands?.length || 0) < (1 + (editStats.extra_stand_slots || 0))) ? (
+                          <form onSubmit={handleCreateStand} className="card mt-2">
+                            <input
+                              type="text"
+                              className="input"
+                              placeholder="Nome do Stand"
+                              value={standForm.name}
+                              onChange={e => setStandForm(prev => ({ ...prev, name: e.target.value }))}
+                            />
+                            <input
+                              type="text"
+                              className="input mt-2"
+                              placeholder="Tipo / Classe"
+                              value={standForm.stand_type}
+                              onChange={e => setStandForm(prev => ({ ...prev, stand_type: e.target.value }))}
+                            />
+                            <textarea
+                              className="textarea input mt-2"
+                              placeholder="Descrição / ideia"
+                              value={standForm.description}
+                              onChange={e => setStandForm(prev => ({ ...prev, description: e.target.value }))}
+                              rows={3}
+                            />
+                            <textarea
+                              className="textarea input mt-2"
+                              placeholder="Poderes / observações"
+                              value={standForm.notes}
+                              onChange={e => setStandForm(prev => ({ ...prev, notes: e.target.value }))}
+                              rows={3}
+                            />
+                            <button className="btn btn-sm btn-primary mt-2" disabled={creatingStand}>
+                              {creatingStand ? 'Criando...' : 'Criar Stand'}
+                            </button>
+                          </form>
+                        ) : (
+                          <p className="text-xs text-muted mt-2">
+                            Limite de Stands atingido.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted mt-2">
+                        Libere o Stand para definir.
+                      </p>
+                    )}
+                  </section>
+                )}
 
-              <div className="mt-4">
-                <h4 className="text-sm mb-2">Acoes do Jogador</h4>
-                <div className="flex gap-2">
-                  <button
-                    className="btn btn-sm btn-secondary w-full"
-                    onClick={() => handleRemovePlayer(selectedCharacter)}
-                    disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
-                  >
-                    {removingId === selectedCharacter.id ? 'Removendo...' : 'Remover'}
-                  </button>
-                  <button
-                    className="btn btn-sm btn-danger w-full"
-                    onClick={() => handleBanPlayer(selectedCharacter)}
-                    disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
-                  >
-                    {banningId === selectedCharacter.id ? 'Banindo...' : 'Banir'}
-                  </button>
-                </div>
+                {campaign?.campaign_type === 'jjk' && (
+                  <section className="character-modal-section full">
+                    <label className="label">Tecnica Inata</label>
+                    <label className="flex items-center gap-2 mb-2">
+                      <input
+                        type="checkbox"
+                        checked={editStats.cursed_energy_unlocked}
+                        onChange={e => setEditStats(prev => ({
+                          ...prev,
+                          cursed_energy_unlocked: e.target.checked
+                        }))}
+                      />
+                      <span>Tecnica liberada</span>
+                    </label>
+                    <div className="form-group mt-2">
+                      <label className="label">Slots extras de Técnica</label>
+                      <input
+                        type="number"
+                        className="input"
+                        min="0"
+                        value={editStats.extra_cursed_technique_slots}
+                        onChange={e => setEditStats(prev => ({
+                          ...prev,
+                          extra_cursed_technique_slots: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                      <p className="text-xs text-muted mt-1">
+                        1 permite uma segunda técnica.
+                      </p>
+                    </div>
+                  </section>
+                )}
+
+                {campaign?.campaign_type === 'bleach' && (
+                  <section className="character-modal-section full">
+                    <label className="label">Zanpakutou</label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editStats.zanpakuto_unlocked}
+                          onChange={e => setEditStats(prev => ({
+                            ...prev,
+                            zanpakuto_unlocked: e.target.checked,
+                            shikai_unlocked: e.target.checked ? prev.shikai_unlocked : false,
+                            bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
+                          }))}
+                        />
+                        <span>Zanpakutou liberada</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editStats.shikai_unlocked}
+                          onChange={e => setEditStats(prev => ({
+                            ...prev,
+                            zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
+                            shikai_unlocked: e.target.checked,
+                            bankai_unlocked: e.target.checked ? prev.bankai_unlocked : false,
+                          }))}
+                        />
+                        <span>Shikai liberada</span>
+                      </label>
+                      <label className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={editStats.bankai_unlocked}
+                          onChange={e => setEditStats(prev => ({
+                            ...prev,
+                            zanpakuto_unlocked: e.target.checked ? true : prev.zanpakuto_unlocked,
+                            shikai_unlocked: e.target.checked ? true : prev.shikai_unlocked,
+                            bankai_unlocked: e.target.checked,
+                          }))}
+                        />
+                        <span>Bankai liberada</span>
+                      </label>
+                    </div>
+                    <div className="form-group mt-2">
+                      <label className="label">Slots extras de Zanpakutou</label>
+                      <input
+                        type="number"
+                        className="input"
+                        min="0"
+                        value={editStats.extra_zanpakuto_slots}
+                        onChange={e => setEditStats(prev => ({
+                          ...prev,
+                          extra_zanpakuto_slots: parseInt(e.target.value) || 0
+                        }))}
+                      />
+                      <p className="text-xs text-muted mt-1">
+                        1 permite uma segunda Zanpakutou.
+                      </p>
+                    </div>
+
+                    <div className="form-group mt-3 kidou-section">
+                      <label className="label">Kidou (Hadou e Bakudou)</label>
+                      <div className="kidou-summary">
+                        <span className="badge">
+                          Tier atual: {selectedCharacter.bleach_kidou_tier || 0}
+                        </span>
+                        <span className="text-xs text-muted">
+                          Libere um tier para gerar 3 opções aleatórias.
+                        </span>
+                      </div>
+                      <div className="kidou-controls">
+                        <div className="kidou-tier">
+                          <label className="label">Liberar Tier</label>
+                          <select
+                            className="input"
+                            value={kidouTier}
+                            onChange={e => setKidouTier(parseInt(e.target.value) || 1)}
+                          >
+                            {[1, 2, 3, 4, 5].map(tier => (
+                              <option key={tier} value={tier}>Tier {tier}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary"
+                          onClick={handleBleachLevelUp}
+                          disabled={kidouOffering}
+                        >
+                          {kidouOffering ? 'Liberando...' : 'Liberar 3 opções'}
+                        </button>
+                      </div>
+
+                      {openBleachOffers.length > 0 && (
+                        <div className="kidou-offers mt-3">
+                          {openBleachOffers.map(offer => (
+                            <div key={offer.id} className="card kidou-offer">
+                              <div className="kidou-offer-header">
+                                <strong>Oferta Tier {offer.tier}</strong>
+                                <span className="text-xs text-muted">Escolha 1</span>
+                              </div>
+                              <div className="kidou-options">
+                                {offer.options.map(option => (
+                                  <button
+                                    key={option.id}
+                                    type="button"
+                                    className="kidou-option"
+                                    onClick={() => handleBleachChooseSpell(offer.id, option.id)}
+                                    disabled={kidouChoosing === `${offer.id}:${option.id}`}
+                                  >
+                                    <div className="kidou-option-title">{option.name}</div>
+                                    <div className="text-xs text-muted">
+                                      {option.spell_type} {option.number || ''} • Tier {option.tier} • PA {option.pa_cost}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {bleachSpells.length > 0 && (
+                        <div className="kidou-list mt-3">
+                          <h4 className="text-sm mb-2">Kidou aprendidos</h4>
+                          <div className="list">
+                            {bleachSpells.map(link => (
+                              <div key={link.id} className="list-item">
+                                <div>
+                                  <strong>{link.spell?.name}</strong>
+                                  <div className="text-xs text-muted">
+                                    {link.spell?.spell_type} {link.spell?.number || ''} • Tier {link.spell?.tier} • PA {link.spell?.pa_cost}
+                                  </div>
+                                </div>
+                                <span className="badge">Maestria {link.mastery}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {closedBleachOffers.length > 0 && (
+                        <div className="kidou-history mt-3">
+                          <h4 className="text-sm mb-2">Histórico de Ofertas</h4>
+                          <div className="list">
+                            {closedBleachOffers.slice(0, 3).map(offer => (
+                              <div key={offer.id} className="list-item">
+                                <div>
+                                  <strong>Tier {offer.tier}</strong>
+                                  <div className="text-xs text-muted">
+                                    Escolhido: {offer.chosen_spell?.name || 'N/A'}
+                                  </div>
+                                </div>
+                                <span className="badge">{offer.is_open ? 'Aberta' : 'Fechada'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </section>
+                )}
+
+                <section className="character-modal-section full">
+                  <details className="character-modal-collapsible">
+                    <summary>Notas</summary>
+                    <div className="character-modal-notes">
+                      <NotesPanel character={selectedCharacter} isGameMaster />
+                    </div>
+                  </details>
+                </section>
+
+                <section className="character-modal-section full">
+                  <h4 className="text-sm mb-2">Ações do Jogador</h4>
+                  <div className="flex gap-2">
+                    <button
+                      className="btn btn-sm btn-secondary w-full"
+                      onClick={() => handleRemovePlayer(selectedCharacter)}
+                      disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
+                    >
+                      {removingId === selectedCharacter.id ? 'Removendo...' : 'Remover'}
+                    </button>
+                    <button
+                      className="btn btn-sm btn-danger w-full"
+                      onClick={() => handleBanPlayer(selectedCharacter)}
+                      disabled={removingId === selectedCharacter.id || banningId === selectedCharacter.id}
+                    >
+                      {banningId === selectedCharacter.id ? 'Banindo...' : 'Banir'}
+                    </button>
+                  </div>
+                </section>
               </div>
             </div>
             <div className="modal-footer">

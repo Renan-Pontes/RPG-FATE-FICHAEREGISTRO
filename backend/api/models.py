@@ -126,6 +126,30 @@ class Advantage(models.Model):
         return self.name
 
 
+class BleachSpell(models.Model):
+    """Kidou (Hadou/Bakudou) para campanhas Bleach"""
+    SPELL_TYPES = [
+        ('hadou', 'Hadou'),
+        ('bakudou', 'Bakudou'),
+        ('forbidden', 'Kidou Proibido'),
+    ]
+
+    name = models.CharField(max_length=150)
+    number = models.IntegerField(null=True, blank=True)
+    spell_type = models.CharField(max_length=20, choices=SPELL_TYPES)
+    tier = models.IntegerField(default=0)
+    pa_cost = models.IntegerField(default=0)
+    effect = models.TextField(blank=True, default='')
+    incantation = models.TextField(blank=True, default='')
+
+    class Meta:
+        ordering = ['spell_type', 'number', 'name']
+
+    def __str__(self):
+        label = f'{self.spell_type} {self.number}' if self.number is not None else self.spell_type
+        return f"{self.name} ({label})"
+
+
 class Character(models.Model):
     """Ficha do personagem - jogador ou NPC"""
     name = models.CharField(max_length=100)
@@ -167,6 +191,7 @@ class Character(models.Model):
     bankai_unlocked = models.BooleanField(default=False)
     shikai_active = models.BooleanField(default=False)
     bankai_active = models.BooleanField(default=False)
+    bleach_kidou_tier = models.IntegerField(default=0)
 
     # NPC = owner é o mestre da campanha
     is_npc = models.BooleanField(default=False)
@@ -175,6 +200,52 @@ class Character(models.Model):
 
     def __str__(self):
         return f"{self.name} ({'NPC' if self.is_npc else 'Jogador'})"
+
+
+class CharacterBleachSpell(models.Model):
+    """Kidou aprendidos e maestria do personagem"""
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='bleach_spell_links')
+    spell = models.ForeignKey(BleachSpell, on_delete=models.CASCADE, related_name='character_links')
+    mastery = models.IntegerField(default=1)
+    acquired_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ('character', 'spell')
+        ordering = ['-acquired_at']
+
+    def __str__(self):
+        return f"{self.character.name} - {self.spell.name} (Maestria {self.mastery})"
+
+
+class BleachSpellOffer(models.Model):
+    """Oferta de kidou para escolha do personagem"""
+    character = models.ForeignKey(Character, on_delete=models.CASCADE, related_name='bleach_spell_offers')
+    tier = models.IntegerField(default=0)
+    options = models.ManyToManyField(BleachSpell, related_name='offers')
+    is_open = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bleach_spell_offers_created',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    chosen_spell = models.ForeignKey(
+        BleachSpell,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='bleach_spell_offers_chosen',
+    )
+    chosen_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        status = 'aberta' if self.is_open else 'fechada'
+        return f"Oferta de Kidou {self.character.name} (Tier {self.tier}, {status})"
 
 
 class CharacterNote(models.Model):

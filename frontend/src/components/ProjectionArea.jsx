@@ -2,7 +2,9 @@ import { useState } from 'react'
 import './ProjectionArea.css'
 
 export default function ProjectionArea({ projection, campaign, isGameMaster }) {
-  const hasProjection = projection?.image
+  const image = projection?.image || projection?.projection_image
+  const title = projection?.title || projection?.projection_title
+  const hasProjection = !!image
   const [fitMode, setFitMode] = useState('contain')
   const [fullscreen, setFullscreen] = useState(false)
 
@@ -13,8 +15,8 @@ export default function ProjectionArea({ projection, campaign, isGameMaster }) {
           <div className="projection-content">
             <div className="projection-frame">
               <img
-                src={projection.image}
-                alt={projection.title || 'Projeção'}
+                src={image}
+                alt={title || 'Projeção'}
                 className={`projection-image ${fitMode}`}
                 onClick={() => setFullscreen(true)}
               />
@@ -42,9 +44,9 @@ export default function ProjectionArea({ projection, campaign, isGameMaster }) {
                 </button>
               </div>
             </div>
-            {projection.title && (
+            {title && (
               <div className="projection-caption">
-                <p>{projection.title}</p>
+                <p>{title}</p>
               </div>
             )}
           </div>
@@ -59,12 +61,12 @@ export default function ProjectionArea({ projection, campaign, isGameMaster }) {
                 Fechar
               </button>
               <img
-                src={projection.image}
-                alt={projection.title || 'Projeção'}
+                src={image}
+                alt={title || 'Projeção'}
                 className="projection-modal-image"
               />
-              {projection.title && (
-                <div className="projection-modal-caption">{projection.title}</div>
+              {title && (
+                <div className="projection-modal-caption">{title}</div>
               )}
             </div>
           )}

@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import (
     Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
+    BleachSpell, CharacterBleachSpell, BleachSpellOffer,
     Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session
 )
@@ -74,6 +75,27 @@ class AdvantageAdmin(admin.ModelAdmin):
 class PersonalityTraitAdmin(admin.ModelAdmin):
     list_display = ('name', 'use_status', 'bonus', 'campaign')
     search_fields = ('name',)
+
+
+@admin.register(BleachSpell)
+class BleachSpellAdmin(admin.ModelAdmin):
+    list_display = ('name', 'spell_type', 'number', 'tier', 'pa_cost')
+    list_filter = ('spell_type', 'tier')
+    search_fields = ('name',)
+
+
+@admin.register(CharacterBleachSpell)
+class CharacterBleachSpellAdmin(admin.ModelAdmin):
+    list_display = ('character', 'spell', 'mastery', 'acquired_at')
+    list_filter = ('spell__spell_type', 'spell__tier')
+    search_fields = ('character__name', 'spell__name')
+
+
+@admin.register(BleachSpellOffer)
+class BleachSpellOfferAdmin(admin.ModelAdmin):
+    list_display = ('character', 'tier', 'is_open', 'created_at', 'chosen_spell')
+    list_filter = ('is_open', 'tier')
+    search_fields = ('character__name',)
 
 
 @admin.register(Stand)

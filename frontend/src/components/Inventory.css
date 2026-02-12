@@ -49,6 +49,7 @@
 }
 
 .item-card {
+  width: 100%;
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
@@ -57,6 +58,11 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   transition: all 0.2s ease;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  appearance: none;
 }
 
 .item-card:hover {
@@ -157,14 +163,27 @@
   font-weight: 600;
 }
 
-.item-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  flex-shrink: 0;
+.inventory-modal {
+  max-width: 560px;
 }
 
-.item-actions .btn {
-  font-size: 0.75rem;
-  padding: 0.35rem 0.5rem;
+.inventory-modal-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.inventory-modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.inventory-modal-transfer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }

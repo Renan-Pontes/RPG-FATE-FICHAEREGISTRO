@@ -14,6 +14,7 @@ from rest_framework.views import APIView
 from .models import (
     Profile, Campaign, CampaignBan, Character, CharacterNote, Item, RollRequest,
     Skill, Ability, Advantage, PersonalityTrait,
+    BleachSpell, CharacterBleachSpell, BleachSpellOffer,
     Stand, CursedTechnique, Zanpakuto, PowerIdea, SkillIdea,
     DiceRoll, Notification, ItemTrade, Session, Message
 )
@@ -25,6 +26,7 @@ from .serializers import (
     CharacterNoteSerializer, ItemSerializer, ItemTransferSerializer,
     SkillSerializer, SkillPublicSerializer, AbilitySerializer, AdvantageSerializer, PersonalityTraitSerializer,
     PersonalityTraitPublicSerializer, SkillIdeaSerializer, MessageSerializer,
+    BleachSpellSerializer, BleachSpellOfferSerializer,
     StandSerializer, CursedTechniqueSerializer, CursedTechniquePublicSerializer, ZanpakutoSerializer, PowerIdeaSerializer,
     DiceRollSerializer, DiceRollMasterSerializer, DiceRollCreateSerializer, RollRequestSerializer,
     NotificationSerializer, ItemTradeSerializer, SessionSerializer,
@@ -148,6 +150,62 @@ def get_power_slot_info(character, idea_type):
         label = 'Técnica Amaldiçoada'
     max_slots = 1 + extra
     return existing, max_slots, label
+
+
+BLEACH_KIDOU_TIERS = {
+    1: {'pa_cost': 4000, 'label': '4.000 P.A'},
+    2: {'pa_cost': 8000, 'label': '8.000 P.A'},
+    3: {'pa_cost': 11000, 'label': '11.000 P.A'},
+    4: {'pa_cost': 15000, 'label': '15.000 P.A'},
+    5: {'pa_cost': 20000, 'label': '20.000 P.A'},
+}
+BLEACH_KIDOU_OFFER_SIZE = 3
+
+
+def _build_bleach_spell_description(spell):
+    lines = [
+        f"Kidou: {spell.get_spell_type_display()} • Nível {spell.tier} • PA {spell.pa_cost}",
+    ]
+    if spell.effect:
+        lines.append(f"Efeito: {spell.effect}")
+    if spell.incantation:
+        lines.append(f"Encanto: {spell.incantation}")
+    return "\n".join(lines)
+
+
+def _sync_bleach_spell_skill(character, spell, mastery):
+    description = _build_bleach_spell_description(spell)
+    skill = Skill.objects.filter(
+        character__id=character.id,
+        name=spell.name,
+        description__startswith='Kidou:',
+        campaign=character.campaign,
+    ).first()
+    if skill is None:
+        skill = Skill.objects.create(
+            name=spell.name,
+            description=description,
+            use_status='',
+            bonus=mastery,
+            campaign=character.campaign,
+        )
+        character.skills.add(skill)
+        return
+
+    update_fields = []
+    if skill.bonus != mastery:
+        skill.bonus = mastery
+        update_fields.append('bonus')
+    if skill.description != description:
+        skill.description = description
+        update_fields.append('description')
+    if skill.campaign_id != character.campaign_id:
+        skill.campaign = character.campaign
+        update_fields.append('campaign')
+    if update_fields:
+        skill.save(update_fields=update_fields)
+    if not character.skills.filter(id=skill.id).exists():
+        character.skills.add(skill)
 
 
 # ============== AUTH ==============
@@ -550,7 +608,8 @@ class CharacterViewSet(viewsets.ModelViewSet):
         
         qs = Character.objects.select_related('campaign', 'owner').prefetch_related(
             'skills', 'abilities', 'advantages', 'personality_traits', 'items', 'notes',
-            'stands', 'zanpakutos', 'cursed_techniques'
+            'stands', 'zanpakutos', 'cursed_techniques',
+            'bleach_spell_links__spell', 'bleach_spell_offers__options'
         )
         
         if campaign_id:
@@ -704,7 +763,11 @@ class CharacterViewSet(viewsets.ModelViewSet):
                 message='Sua Bankai foi liberada.',
                 related_character=character,
             )
-        return Response(CharacterMasterSerializer(character).data)
+        if is_campaign_master(request.user, character.campaign):
+            serializer = CharacterMasterSerializer(character)
+        else:
+            serializer = CharacterPublicSerializer(character)
+        return Response(serializer.data)
 
     @action(detail=True, methods=['post'])
     def add_fate_point(self, request, pk=None):
@@ -717,6 +780,127 @@ class CharacterViewSet(viewsets.ModelViewSet):
         character.fate_points += amount
         character.save()
         return Response({'fate_points': character.fate_points})
+
+    @action(detail=True, methods=['post'])
+    def bleach_level_up(self, request, pk=None):
+        """Mestre libera nível de kidou e gera oferta de escolha"""
+        character = self.get_object()
+        ensure_not_banned(request.user, character.campaign)
+        if not is_campaign_master(request.user, character.campaign):
+            raise PermissionDenied('Apenas o mestre pode dar level up.')
+        if character.campaign.campaign_type != 'bleach':
+            raise ValidationError('Esta ação só é válida em campanhas Bleach.')
+
+        tier_raw = request.data.get('tier')
+        if tier_raw is None:
+            raise ValidationError('Informe o nível (tier).')
+        try:
+            tier = int(tier_raw)
+        except (TypeError, ValueError):
+            raise ValidationError('Nível inválido.')
+        if tier not in BLEACH_KIDOU_TIERS:
+            raise ValidationError('Nível inválido.')
+        if tier < character.bleach_kidou_tier:
+            raise ValidationError('Este personagem já está em um nível superior.')
+
+        BleachSpellOffer.objects.filter(character=character, is_open=True).update(is_open=False)
+
+        if character.bleach_kidou_tier < tier:
+            character.bleach_kidou_tier = tier
+            character.save(update_fields=['bleach_kidou_tier'])
+
+        spells_qs = BleachSpell.objects.filter(
+            spell_type__in=['hadou', 'bakudou'],
+            tier=tier,
+        )
+        if spells_qs.count() < BLEACH_KIDOU_OFFER_SIZE:
+            raise ValidationError('Não há kidous suficientes para este nível.')
+
+        options = random.sample(list(spells_qs), k=BLEACH_KIDOU_OFFER_SIZE)
+        offer = BleachSpellOffer.objects.create(
+            character=character,
+            tier=tier,
+            created_by=request.user,
+        )
+        offer.options.set(options)
+
+        if character.owner_id != request.user.id:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Novos Kidou Liberados',
+                message='O mestre liberou novos kidous. Escolha 1 entre 3 opções.',
+                related_character=character,
+            )
+
+        return Response(BleachSpellOfferSerializer(offer).data)
+
+    @action(detail=True, methods=['post'])
+    def bleach_choose_spell(self, request, pk=None):
+        """Jogador escolhe um kidou entre as opções liberadas"""
+        character = self.get_object()
+        ensure_not_banned(request.user, character.campaign)
+        if character.campaign.campaign_type != 'bleach':
+            raise ValidationError('Esta ação só é válida em campanhas Bleach.')
+        if not (
+            character.owner_id == request.user.id
+            or is_campaign_master(request.user, character.campaign)
+        ):
+            raise PermissionDenied('Você não pode escolher kidou deste personagem.')
+
+        offer_id = request.data.get('offer_id')
+        spell_id = request.data.get('spell_id')
+        if not offer_id or not spell_id:
+            raise ValidationError('Informe offer_id e spell_id.')
+
+        offer = BleachSpellOffer.objects.select_related('character').prefetch_related('options').filter(
+            id=offer_id
+        ).first()
+        if not offer or offer.character_id != character.id:
+            raise ValidationError('Oferta inválida.')
+        if not offer.is_open:
+            raise ValidationError('Esta oferta já foi fechada.')
+        if not offer.options.filter(id=spell_id).exists():
+            raise ValidationError('Este kidou não está na oferta.')
+
+        with transaction.atomic():
+            link, created = CharacterBleachSpell.objects.get_or_create(
+                character=character,
+                spell_id=spell_id,
+                defaults={'mastery': 1},
+            )
+            if not created:
+                link.mastery += 1
+                link.save(update_fields=['mastery'])
+
+            _sync_bleach_spell_skill(character, link.spell, link.mastery)
+
+            offer.is_open = False
+            offer.chosen_spell_id = spell_id
+            offer.chosen_at = timezone.now()
+            offer.save(update_fields=['is_open', 'chosen_spell', 'chosen_at'])
+
+        if character.owner_id == request.user.id and character.campaign.owner_id != request.user.id:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.campaign.owner,
+                notification_type='system',
+                title='Kidou Escolhido',
+                message=f'{character.name} escolheu um kidou.',
+                related_character=character,
+            )
+        elif character.owner_id != request.user.id:
+            Notification.objects.create(
+                campaign=character.campaign,
+                recipient=character.owner,
+                notification_type='system',
+                title='Kidou Escolhido',
+                message='O mestre definiu seu kidou.',
+                related_character=character,
+            )
+
+        return Response(CharacterMasterSerializer(character).data)
 
     @action(detail=True, methods=['post'])
     def use_fate_point(self, request, pk=None):
@@ -1264,6 +1448,25 @@ class AbilityViewSet(viewsets.ModelViewSet):
         if not is_game_master(self.request.user):
             raise PermissionDenied('Apenas mestres podem criar abilities.')
         serializer.save()
+
+
+class BleachSpellViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = BleachSpellSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = BleachSpell.objects.all().order_by('spell_type', 'number', 'name')
+        spell_type = self.request.query_params.get('type')
+        tier_raw = self.request.query_params.get('tier')
+        if spell_type:
+            qs = qs.filter(spell_type=spell_type)
+        if tier_raw:
+            try:
+                tier = int(tier_raw)
+                qs = qs.filter(tier=tier)
+            except (TypeError, ValueError):
+                return BleachSpell.objects.none()
+        return qs
 
 
 class AdvantageViewSet(viewsets.ModelViewSet):
