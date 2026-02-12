@@ -155,13 +155,15 @@ export default function CharacterSheet({ character, campaign, isGameMaster, powe
     }
   }
 
+  const imageUrl = api.mediaUrl(character?.image)
+
   return (
     <div className="character-sheet">
       {/* Header com imagem e nome */}
       <div className="sheet-header">
         <div className="character-avatar">
-          {character.image ? (
-            <img src={character.image} alt={character.name} />
+          {imageUrl ? (
+            <img src={imageUrl} alt={character.name} />
           ) : (
             <div className="avatar-placeholder">
               {character.name.charAt(0).toUpperCase()}

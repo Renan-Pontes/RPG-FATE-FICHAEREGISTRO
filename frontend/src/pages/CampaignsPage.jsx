@@ -150,7 +150,7 @@ export default function CampaignsPage() {
                 >
                   <div className="campaign-image">
                     {campaign.image ? (
-                      <img src={campaign.image} alt={campaign.name} />
+                      <img src={api.mediaUrl(campaign.image)} alt={campaign.name} />
                     ) : (
                       <div className="campaign-placeholder">
                         <span>{typeInfo.icon}</span>

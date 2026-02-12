@@ -1,8 +1,9 @@
 import { useState } from 'react'
+import * as api from '../api'
 import './ProjectionArea.css'
 
 export default function ProjectionArea({ projection, campaign, isGameMaster }) {
-  const image = projection?.image || projection?.projection_image
+  const image = api.mediaUrl(projection?.image || projection?.projection_image)
   const title = projection?.title || projection?.projection_title
   const hasProjection = !!image
   const [fitMode, setFitMode] = useState('contain')
@@ -84,7 +85,7 @@ export default function ProjectionArea({ projection, campaign, isGameMaster }) {
             
             {campaign?.image && (
               <img 
-                src={campaign.image} 
+                src={api.mediaUrl(campaign.image)} 
                 alt={campaign.name}
                 className="campaign-banner"
               />

@@ -239,7 +239,8 @@ export default function Inventory({ character, party, onUpdate }) {
 
 function ItemCard({ item, isEquipped, onOpen }) {
   const icon = ITEM_TYPE_ICONS[item.item_type] || '📦'
-  const hasImage = !!item.image
+  const imageUrl = api.mediaUrl(item.image)
+  const hasImage = !!imageUrl
 
   return (
     <button
@@ -249,7 +250,7 @@ function ItemCard({ item, isEquipped, onOpen }) {
     >
       <div className="item-media">
         {hasImage ? (
-          <img src={item.image} alt={item.name} />
+          <img src={imageUrl} alt={item.name} />
         ) : (
           <div className="item-icon">{icon}</div>
         )}

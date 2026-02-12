@@ -501,7 +501,7 @@ export default function PartyPanel({ party, campaign, skills, traits = [], power
               <div className="party-card-header">
                 <div className="party-avatar">
                   {char.image ? (
-                    <img src={char.image} alt={char.name} />
+                    <img src={api.mediaUrl(char.image)} alt={char.name} />
                   ) : (
                     <span>{char.name.charAt(0)}</span>
                   )}

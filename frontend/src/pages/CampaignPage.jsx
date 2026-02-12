@@ -114,7 +114,7 @@ export default function CampaignPage() {
     loadData()
   }, [loadData])
 
-  const projectionImage = projection?.image || projection?.projection_image
+  const projectionImage = api.mediaUrl(projection?.image || projection?.projection_image)
   const projectionTitle = projection?.title || projection?.projection_title
   const projectionUpdatedAt = projection?.updated_at || projection?.projection_updated_at
 
@@ -1061,7 +1061,7 @@ function ItemsManagerPanel({ items, party, campaign, onUpdate }) {
             <div key={item.id} className="list-item">
               <div className="item-row">
                 {item.image && (
-                  <img src={item.image} alt={item.name} className="item-thumb" />
+                  <img src={api.mediaUrl(item.image)} alt={item.name} className="item-thumb" />
                 )}
                 <div className="item-info">
                   <strong>{item.name}</strong>

@@ -87,7 +87,7 @@ export default function CampaignMap({
   const currentStrokeRef = useRef(null)
   const mapRef = useRef(localMap)
 
-  const mapImage = mapData?.map_image || null
+  const mapImage = api.mediaUrl(mapData?.map_image || null)
 
   useEffect(() => {
     mapRef.current = localMap

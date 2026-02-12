@@ -1,4 +1,20 @@
-const API_BASE = '/api'
+const API_BASE = (
+  import.meta.env.VITE_API_BASE
+  || (import.meta.env.DEV ? '/api' : 'http://rpgfate.pythonanywhere.com/api')
+).replace(/\/$/, '')
+const MEDIA_BASE = (import.meta.env.VITE_MEDIA_BASE || API_BASE.replace(/\/api$/, ''))
+  .replace(/\/$/, '')
+
+export function mediaUrl(url) {
+  if (!url) return null
+  if (url.startsWith('data:')) return url
+  if (/^https?:\/\//i.test(url)) return url
+  if (url.startsWith('//')) {
+    return `${window.location.protocol}${url}`
+  }
+  if (url.startsWith('/')) return `${MEDIA_BASE}${url}`
+  return `${MEDIA_BASE}/${url}`
+}
 
 // Helpers
 function getToken() {
