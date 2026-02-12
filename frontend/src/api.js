@@ -1,6 +1,6 @@
 const API_BASE = (
   import.meta.env.VITE_API_BASE
-  || (import.meta.env.DEV ? '/api' : 'http://rpgfate.pythonanywhere.com/api')
+  || (import.meta.env.DEV ? '/api' : 'https://rpgfate.pythonanywhere.com/api')
 ).replace(/\/$/, '')
 const MEDIA_BASE = (import.meta.env.VITE_MEDIA_BASE || API_BASE.replace(/\/api$/, ''))
   .replace(/\/$/, '')
